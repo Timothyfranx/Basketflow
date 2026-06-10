@@ -458,3 +458,62 @@ select:focus, input:focus {
 .modal-overlay .glass-panel {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 245, 160, 0.1);
 }
+
+/* Responsive Flow steps grid */
+.flow-steps-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: center;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .flow-steps-container {
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 16px;
+  }
+}
+
+/* Mobile Bottom Navigation Bar */
+.mobile-nav-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: rgba(7, 9, 19, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex: 1;
+  height: 100%;
+  transition: color 0.2s ease;
+}
+
+.mobile-nav-item:hover {
+  color: var(--text-primary);
+}
+
+.mobile-nav-item.active {
+  color: var(--mantle-green);
+}

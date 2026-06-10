@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { 
   TrendingUp, 
   DollarSign, 
@@ -11,7 +11,7 @@ import {
   ArrowLeft, 
   ShieldCheck, 
   Activity, 
-  ExternalLink 
+  ExternalLink
 } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { 
@@ -21,6 +21,157 @@ import {
 } from "wagmi";
 import { parseUnits } from "viem";
 import { TOKENS, VAULTS, VAULT_ABI, ERC20_ABI } from "./contracts";
+
+// --- MEMOIZED PERFORMANCE TICKERS & CHARTS TO PREVENT FULL PAGE RE-RENDERS ---
+interface InterestTickerProps {
+  shares: Record<string, number>;
+  liveApys: Record<string, number>;
+  vaultsList: Record<string, any>;
+  speedUp?: number;
+  prefix?: string;
+}
+
+export const InterestTicker = memo(({ shares, liveApys, vaultsList, speedUp = 2.5, prefix = "" }: InterestTickerProps) => {
+  const [interest, setInterest] = useState(0.0);
+
+  useEffect(() => {
+    let totalYieldPerSecond = 0;
+    Object.keys(vaultsList).forEach((key) => {
+      const shareBal = shares[key] || 0;
+      const apy = liveApys[key] || 10.0;
+      const positionYieldPerSecond = (shareBal * 1.0 * (apy / 100)) / (365 * 24 * 3600);
+      totalYieldPerSecond += positionYieldPerSecond;
+    });
+
+    if (totalYieldPerSecond === 0) {
+      setInterest(0);
+      return;
+    }
+
+    // Smooth counter refresh every 100ms
+    const timer = setInterval(() => {
+      setInterest((prev) => prev + (totalYieldPerSecond / 10) * speedUp);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [shares, liveApys, vaultsList, speedUp]);
+
+  return <span className="yield-ticker text-emerald-400 font-bold">{prefix}${interest.toFixed(6)}</span>;
+});
+
+export const PerformanceChart = memo(({ vaultKey }: { vaultKey: string }) => {
+  // Generate distinct curves and colors based on vaultKey
+  let pathD = "M0,80 Q70,75 140,55 T280,45 T420,25 T500,15";
+  let areaD = "M0,80 Q70,75 140,55 T280,45 T420,25 T500,15 L500,100 L0,100 Z";
+  let colorStart = "#00f5a0";
+  let colorEnd = "#00d9f5";
+  
+  if (vaultKey === "stableShuffle") {
+    pathD = "M0,70 Q90,72 180,68 T360,65 T500,60";
+    areaD = "M0,70 Q90,72 180,68 T360,65 T500,60 L500,100 L0,100 Z";
+    colorStart = "#8b5cf6";
+    colorEnd = "#d946ef";
+  } else if (vaultKey === "moePowerhouse" || vaultKey === "hyperDrive") {
+    pathD = "M0,85 Q60,70 120,80 T240,40 T360,60 T500,10";
+    areaD = "M0,85 Q60,70 120,80 T240,40 T360,60 T500,10 L500,100 L0,100 Z";
+    colorStart = "#fbbf24";
+    colorEnd = "#f43f5e";
+  } else if (vaultKey === "mantleMax") {
+    pathD = "M0,75 Q80,50 160,60 T320,30 T500,5";
+    areaD = "M0,75 Q80,50 160,60 T320,30 T500,5 L500,100 L0,100 Z";
+    colorStart = "#10b981";
+    colorEnd = "#059669";
+  }
+
+  const gradIdLine = `lineGrad-${vaultKey}`;
+  const gradIdArea = `areaGrad-${vaultKey}`;
+
+  return (
+    <div className="w-full h-48 bg-black/20 rounded-xl border border-white/5 p-2 relative">
+      <svg viewBox="0 0 500 100" className="w-full h-full overflow-visible">
+        {/* Grids */}
+        <line x1="0" y1="20" x2="500" y2="20" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+        <line x1="0" y1="50" x2="500" y2="50" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+        <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+        
+        {/* Area gradient under path */}
+        <path 
+          d={areaD} 
+          fill={`url(#${gradIdArea})`} 
+          className="chart-area"
+        />
+        
+        {/* Line path */}
+        <path 
+          d={pathD} 
+          fill="none" 
+          stroke={`url(#${gradIdLine})`} 
+          strokeWidth="2.5" 
+          strokeLinecap="round"
+          className="chart-line"
+        />
+        
+        {/* Gradients definitions */}
+        <defs>
+          <linearGradient id={gradIdLine} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={colorStart} />
+            <stop offset="100%" stopColor={colorEnd} />
+          </linearGradient>
+          <linearGradient id={gradIdArea} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={colorStart} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={colorStart} stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+      </svg>
+      {/* Chart Tooltips/Labels */}
+      <div className="absolute bottom-2 left-2 text-[10px] text-[#64748b]">30 Days Ago</div>
+      <div className="absolute bottom-2 right-2 text-[10px] text-[#64748b]">Today</div>
+    </div>
+  );
+});
+
+export const CompositionChart = memo(({ allocations }: { allocations: any[] }) => {
+  return (
+    <div className="flex justify-center">
+      <svg width="180" height="180" viewBox="0 0 36 36" className="overflow-visible transform -rotate-90">
+        {/* Underlay base */}
+        <circle cx="18" cy="18" r="15.91549430918954" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="4" />
+        
+        {/* Dynamic segments */}
+        {allocations.map((alloc: any, idx: number) => {
+          let previousWeightsSum = 0;
+          for (let i = 0; i < idx; i++) {
+            previousWeightsSum += allocations[i].weight;
+          }
+          return (
+            <circle 
+              key={idx}
+              cx="18" 
+              cy="18" 
+              r="15.91549430918954" 
+              fill="none" 
+              stroke={idx === 0 ? "#00f5a0" : idx === 1 ? "#00d9f5" : "#8b5cf6"} 
+              strokeWidth="4" 
+              strokeDasharray={`${alloc.weight} ${100 - alloc.weight}`} 
+              strokeDashoffset={100 - previousWeightsSum + 25} 
+              className="transition-all duration-500 hover:stroke-[5px] cursor-pointer"
+            />
+          );
+        })}
+        
+        {/* Donut Hole content */}
+        <circle cx="18" cy="18" r="12" fill="#030712" />
+        
+        {/* Text inside */}
+        <g transform="rotate(90 18 18)">
+          <text x="18" y="16.5" textAnchor="middle" fill="#94a3b8" fontSize="3" fontWeight="600" letterSpacing="0.1">WEIGHTS</text>
+          <text x="18" y="21" textAnchor="middle" fill="#f8fafc" fontSize="4.5" fontWeight="700">Classic</text>
+        </g>
+      </svg>
+    </div>
+  );
+});
+
 
 export default function App() {
   const { isConnected, address } = useAccount();
@@ -53,7 +204,6 @@ export default function App() {
     };
   });
 
-  const [demoInterest, setDemoInterest] = useState<number>(0.0);
   const [txStep, setTxStep] = useState<number>(0);
   const [txModalOpen, setTxModalOpen] = useState<boolean>(false);
   const [txType, setTxType] = useState<"deposit" | "withdraw">("deposit");
@@ -186,33 +336,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [vaultsList]);
 
-  // Live Interest Accumulator for Demo Mode
-  useEffect(() => {
-    let interval: any;
-    
-    // Sum up the value of all active deposits dynamically
-    let activeDepositsValue = 0;
-    Object.keys(vaultsList).forEach((key) => {
-      const shareBal = demoBalances.shares[key] || 0;
-      activeDepositsValue += shareBal * 1.0; // Assume 1 share = $1 for demo value
-    });
 
-    if (activeDepositsValue > 0) {
-      interval = setInterval(() => {
-        // Calculate total yield per second based on the dynamic APY of each position
-        let totalYieldPerSecond = 0;
-        Object.keys(vaultsList).forEach((key) => {
-          const shareBal = demoBalances.shares[key] || 0;
-          const apy = liveApys[key] || 10.0;
-          const positionYieldPerSecond = (shareBal * 1.0 * (apy / 100)) / (365 * 24 * 3600);
-          totalYieldPerSecond += positionYieldPerSecond;
-        });
-
-        setDemoInterest((prev) => prev + totalYieldPerSecond * 2.5); // Sped up 2.5x for demo visual reward
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [demoBalances.shares, vaultsList, liveApys]);
 
   const handleCreateBasket = async () => {
     if (!newBasketName) return;
@@ -575,7 +699,7 @@ export default function App() {
       </header>
 
       {/* CORE CONTENT LAYOUT */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 py-8">
+      <main className={`flex-grow max-w-7xl w-full mx-auto px-4 py-8 ${appMode === "app" ? "pb-24 md:pb-8" : ""}`}>
         
         {/* LANDING PAGE MODE */}
         {appMode === "landing" && (
@@ -649,7 +773,7 @@ export default function App() {
                 How BasketFlow Simplifies DeFi Yield
               </h2>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center relative">
+              <div className="flow-steps-container">
                 {/* Step 1 */}
                 <div className="flex flex-col items-center text-center p-6 bg-white/2 border border-white/5 rounded-2xl relative">
                   <div className="w-12 h-12 rounded-xl bg-[#00f5a0]/10 border border-[#00f5a0]/20 flex items-center justify-center text-2xl font-bold text-[#00f5a0] mb-4">
@@ -715,7 +839,7 @@ export default function App() {
               </div>
 
               {/* Baskets Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="cards-grid">
                 {Object.keys(vaultsList).slice(0, 3).map((key) => {
                   const vault = vaultsList[key];
                   const apyVal = liveApys[key] !== undefined ? `${liveApys[key]}%` : vault.targetApy;
@@ -826,7 +950,6 @@ export default function App() {
                     initialShares[key] = 0;
                   });
                   setDemoBalances({ USDT: 1500, USDC: 800, MNT: 500, shares: initialShares });
-                  setDemoInterest(0.0);
                 }} 
                 className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
               >
@@ -848,7 +971,7 @@ export default function App() {
             </div>
 
             {/* METRICS ROW */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="metrics-grid mb-8">
               <div className="glass-panel p-6 flex items-center gap-4">
                 <div className="bg-white/5 p-3 rounded-xl text-[#00f5a0]">
                   <DollarSign size={24} />
@@ -899,7 +1022,7 @@ export default function App() {
             </div>
 
             {/* BASKET CARDS GRID */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="cards-grid">
               {(Object.keys(vaultsList)).map((key) => {
                 const vault = vaultsList[key];
                 const apyVal = liveApys[key] !== undefined ? `${liveApys[key]}%` : vault.targetApy;
@@ -1277,9 +1400,12 @@ export default function App() {
                     {demoBalances.shares[selectedVaultKey] > 0 && (
                       <div className="border-t border-white/5 pt-3 mt-1 flex justify-between items-center text-xs text-[#94a3b8]">
                         <span>Interest Earned</span>
-                        <span className="yield-ticker text-emerald-400 font-bold">
-                          +${demoInterest.toFixed(6)}
-                        </span>
+                        <InterestTicker 
+                          shares={{ [selectedVaultKey]: demoBalances.shares[selectedVaultKey] }} 
+                          liveApys={liveApys} 
+                          vaultsList={{ [selectedVaultKey]: activeVault }}
+                          prefix="+"
+                        />
                       </div>
                     )}
                   </div>
@@ -1312,8 +1438,12 @@ export default function App() {
                 {/* Interest count up ticker */}
                 <div className="bg-black/25 border border-white/5 rounded-2xl p-6 text-left min-w-[200px]">
                   <div className="text-xs text-[#94a3b8] font-bold uppercase tracking-wider mb-1">Total Yield Earned</div>
-                  <div className="text-3xl font-bold yield-ticker">
-                    {demoMode ? `$${demoInterest.toFixed(6)}` : "$0.000000"}
+                  <div className="text-3xl font-bold">
+                    {demoMode ? (
+                      <InterestTicker shares={demoBalances.shares} liveApys={liveApys} vaultsList={vaultsList} />
+                    ) : (
+                      <span className="yield-ticker text-[#94a3b8]">$0.000000</span>
+                    )}
                   </div>
                   <div className="text-[10px] text-[#64748b] mt-1">Real-time yield count up</div>
                 </div>
@@ -1338,7 +1468,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:flex sm:gap-12 gap-4 text-left">
+                        <div className="grid grid-cols-3 sm:flex sm:gap-12 gap-2 text-left w-full sm:w-auto">
                           <div>
                             <div className="text-[10px] text-[#94a3b8] font-bold uppercase">Allocated</div>
                             <div className="font-semibold text-sm text-[#f8fafc]">{shareBal} shares</div>
@@ -1396,7 +1526,7 @@ export default function App() {
                 <tbody className="divide-y divide-white/5 text-sm text-[#f8fafc]">
                   {[
                     { rank: 1, address: "replytim.mnt", baskets: 3, yield: "$423.82", badge: "Yield King", active: true },
-                    { rank: 2, address: "0x7099...79c8", baskets: 2, yield: demoMode ? `$${demoInterest.toFixed(2)}` : "$0.00", badge: "You", active: true, highlight: true },
+                    { rank: 2, address: "0x7099...79c8", baskets: 2, yield: demoMode ? <InterestTicker shares={demoBalances.shares} liveApys={liveApys} vaultsList={vaultsList} /> : "$0.00", badge: "You", active: true, highlight: true },
                     { rank: 3, address: "vitalik.eth", baskets: 2, yield: "$128.52", badge: "Pioneer" },
                     { rank: 4, address: "0x3c44...62b9", baskets: 1, yield: "$84.21", badge: "Regular" },
                     { rank: 5, address: "0x90f7...72ff", baskets: 1, yield: "$32.40", badge: "Regular" },
@@ -1874,6 +2004,33 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {appMode === "app" && (
+        <div className="md:hidden mobile-nav-bar">
+          <button 
+            onClick={() => setCurrentView("baskets")} 
+            className={`mobile-nav-item ${currentView === "baskets" || currentView === "detail" ? "active" : ""}`}
+          >
+            <TrendingUp size={20} />
+            <span>Invest</span>
+          </button>
+          <button 
+            onClick={() => setCurrentView("dashboard")} 
+            className={`mobile-nav-item ${currentView === "dashboard" ? "active" : ""}`}
+          >
+            <DollarSign size={20} />
+            <span>Portfolio</span>
+          </button>
+          <button 
+            onClick={() => setCurrentView("leaderboard")} 
+            className={`mobile-nav-item ${currentView === "leaderboard" ? "active" : ""}`}
+          >
+            <Award size={20} />
+            <span>Leaderboard</span>
+          </button>
         </div>
       )}
 
