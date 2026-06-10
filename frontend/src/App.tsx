@@ -173,6 +173,241 @@ export const CompositionChart = memo(({ allocations }: { allocations: any[] }) =
 });
 
 
+interface YieldRoutingVisualizerProps {
+  liveApys: Record<string, number>;
+  vaultsList: Record<string, any>;
+}
+
+export const YieldRoutingVisualizer = ({ liveApys, vaultsList }: YieldRoutingVisualizerProps) => {
+  const [simAmount, setSimAmount] = useState<string>("1000");
+  const [simToken, setSimToken] = useState<"USDT" | "USDC" | "MNT">("USDT");
+  const [simVaultKey, setSimVaultKey] = useState<string>("conservative");
+  const [simState, setSimState] = useState<"idle" | "routing" | "swapping" | "pooling" | "complete">("idle");
+  const [simProgress, setSimProgress] = useState<number>(0);
+  const [simYield, setSimYield] = useState<number>(0.0);
+
+  const activeVault = vaultsList[simVaultKey] || vaultsList["conservative"];
+  const apy = liveApys[simVaultKey] || 10.0;
+
+  useEffect(() => {
+    let timer: any;
+    let yieldInterval: any;
+
+    if (simState === "routing") {
+      setSimProgress(15);
+      timer = setTimeout(() => {
+        setSimState("swapping");
+      }, 1500);
+    } else if (simState === "swapping") {
+      setSimProgress(50);
+      timer = setTimeout(() => {
+        setSimState("pooling");
+      }, 1800);
+    } else if (simState === "pooling") {
+      setSimProgress(80);
+      timer = setTimeout(() => {
+        setSimState("complete");
+      }, 1500);
+    } else if (simState === "complete") {
+      setSimProgress(100);
+      const amount = parseFloat(simAmount) || 1000;
+      const yieldPerSecond = (amount * (apy / 100)) / (365 * 24 * 3600);
+      const speedUp = 150;
+      yieldInterval = setInterval(() => {
+        setSimYield((prev) => prev + (yieldPerSecond / 10) * speedUp);
+      }, 100);
+    } else if (simState === "idle") {
+      setSimProgress(0);
+      setSimYield(0.0);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(yieldInterval);
+    };
+  }, [simState, simAmount, apy]);
+
+  const handleStartSim = () => {
+    if (simState !== "idle") {
+      setSimState("idle");
+    } else {
+      setSimState("routing");
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 sm:p-8 bg-black/40 border border-[#00f5a0]/15 relative overflow-hidden">
+      <div className="absolute -top-32 -right-32 w-64 h-64 bg-[#00f5a0]/5 rounded-full blur-[80px] pointer-events-none" />
+      
+      <div className="text-center mb-6">
+        <h3 className="text-xl font-bold text-[#f8fafc] mb-1">Interactive Yield Router</h3>
+        <p className="text-xs text-[#94a3b8]">Simulate how BasketFlow splits, swaps, and stakes your assets in real-time.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch mb-6">
+        {/* Step 1: Simulator Controls */}
+        <div className="p-5 bg-white/2 border border-white/5 rounded-2xl flex flex-col justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-6 h-6 rounded-full bg-[#00f5a0]/10 border border-[#00f5a0]/30 text-xs font-bold text-[#00f5a0] flex items-center justify-center">1</span>
+              <span className="text-sm font-bold text-[#f8fafc]">Set Deposit Input</span>
+            </div>
+            
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Select Token</label>
+                <div className="flex gap-2">
+                  {(["USDT", "USDC", "MNT"] as const).map((t) => (
+                    <button
+                      key={t}
+                      disabled={simState !== "idle"}
+                      onClick={() => setSimToken(t)}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold border transition-all ${simToken === t ? "bg-[#00f5a0]/10 border-[#00f5a0] text-[#00f5a0]" : "bg-black/20 border-white/5 text-[#94a3b8] hover:border-white/10"}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Amount</label>
+                <input
+                  type="number"
+                  disabled={simState !== "idle"}
+                  value={simAmount}
+                  onChange={(e) => setSimAmount(e.target.value)}
+                  className="bg-black/40 border border-white/5 text-white rounded-lg px-3 py-1.5 text-sm font-semibold outline-none focus:border-[#00f5a0] w-full"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Target Basket</label>
+                <select
+                  disabled={simState !== "idle"}
+                  value={simVaultKey}
+                  onChange={(e) => setSimVaultKey(e.target.value)}
+                  className="bg-black/40 border border-white/5 text-white rounded-lg px-3 py-1.5 text-xs font-semibold outline-none focus:border-[#00f5a0] w-full"
+                >
+                  {Object.keys(vaultsList).map((key) => (
+                    <option key={key} value={key}>
+                      {vaultsList[key].name} ({vaultsList[key].targetApy})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleStartSim}
+            className={`w-full py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${simState === "idle" ? "glow-btn-primary" : "btn-secondary text-red-400 border-red-500/20 hover:bg-red-500/5 hover:border-red-500/30"}`}
+          >
+            {simState === "idle" ? (
+              <>
+                <span>Simulate Routing Flow</span>
+                <ArrowUpRight size={14} />
+              </>
+            ) : (
+              <span>Reset Simulator</span>
+            )}
+          </button>
+        </div>
+
+        {/* Step 2: The Visualizer Canvas (Animated nodes) */}
+        <div className="lg:col-span-2 p-5 bg-white/2 border border-white/5 rounded-2xl flex flex-col justify-between relative min-h-[300px] overflow-hidden">
+          <div className="absolute top-1/2 left-6 right-6 h-[2px] bg-white/5 -translate-y-1/2 pointer-events-none z-0 hidden sm:block" />
+          {simProgress > 0 && (
+            <div 
+              style={{ width: `${simProgress - 10}%` }}
+              className="absolute top-1/2 left-6 h-[2px] bg-gradient-to-r from-[#00f5a0] to-[#00d9f5] -translate-y-1/2 pointer-events-none z-0 transition-all duration-1000 hidden sm:block" 
+            />
+          )}
+
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-6 h-6 rounded-full bg-[#00f5a0]/10 border border-[#00f5a0]/30 text-xs font-bold text-[#00f5a0] flex items-center justify-center">2</span>
+            <span className="text-sm font-bold text-[#f8fafc]">On-Chain Routing Path</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-4 relative z-10 my-auto">
+            {/* Input Node */}
+            <div className={`flex flex-col items-center justify-center w-20 h-20 rounded-2xl border bg-black/40 transition-all duration-500 ${simState !== "idle" ? "border-[#00f5a0] shadow-[0_0_15px_rgba(0,245,160,0.2)]" : "border-white/5"}`}>
+              <span className="text-2xl mb-1">💳</span>
+              <span className="text-[10px] font-bold text-[#f8fafc]">{simAmount} {simToken}</span>
+              <span className="text-[8px] text-[#94a3b8] uppercase font-semibold">Deposit</span>
+            </div>
+
+            {/* Transition Arrow */}
+            <div className="flex sm:flex-col items-center justify-center text-xs font-bold text-[#94a3b8]">
+              <span className={`animate-pulse ${simState === "routing" ? "text-[#00f5a0]" : ""}`}>➔</span>
+              <span className="text-[8px] hidden sm:block">Swap Routing</span>
+            </div>
+
+            {/* Router Node */}
+            <div className={`flex flex-col items-center justify-center w-24 h-24 rounded-full border bg-black/60 transition-all duration-500 relative ${
+              simState === "swapping" ? "border-[#00f5a0] shadow-[0_0_20px_rgba(0,245,160,0.3)] scale-105" :
+              simState === "pooling" || simState === "complete" ? "border-[#00d9f5] shadow-[0_0_15px_rgba(0,217,245,0.15)]" :
+              "border-white/5"
+            }`}>
+              {simState === "swapping" && (
+                <div className="absolute inset-2 border-2 border-dashed border-[#00f5a0] rounded-full animate-spin pointer-events-none" />
+              )}
+              <span className="text-2xl mb-1">🧺</span>
+              <span className="text-[9px] font-bold text-[#f8fafc] text-center px-2 leading-none">BasketFlow Router</span>
+              <span className="text-[7px] text-[#00f5a0] uppercase font-semibold mt-1">
+                {simState === "idle" ? "Ready" :
+                 simState === "routing" ? "Routing..." :
+                 simState === "swapping" ? "Swapping..." :
+                 simState === "pooling" ? "Compounding..." : "Active"}
+              </span>
+            </div>
+
+            {/* Transition Arrow */}
+            <div className="flex sm:flex-col items-center justify-center text-xs font-bold text-[#94a3b8]">
+              <span className={`animate-pulse ${simState === "pooling" ? "text-[#00d9f5]" : ""}`}>➔</span>
+              <span className="text-[8px] hidden sm:block">Pool Deposit</span>
+            </div>
+
+            {/* Output LP Node */}
+            <div className={`flex flex-col items-center justify-center w-20 h-20 rounded-2xl border bg-black/40 transition-all duration-500 ${simState === "complete" ? "border-[#00d9f5] shadow-[0_0_15px_rgba(0,217,245,0.3)] scale-105" : "border-white/5"}`}>
+              <span className="text-2xl mb-1">🛡️</span>
+              <span className="text-[10px] font-bold text-[#f8fafc]">{activeVault.symbol}</span>
+              <span className="text-[8px] text-[#00d9f5] uppercase font-semibold">Compounding</span>
+            </div>
+          </div>
+
+          <div className="mt-4 p-2.5 rounded-xl bg-black/20 border border-white/5 text-center text-xs text-[#94a3b8]">
+            {simState === "idle" && "Click 'Simulate Routing Flow' to start the demo."}
+            {simState === "routing" && `Validating deposit of ${simAmount} ${simToken} and routing on Mantle network...`}
+            {simState === "swapping" && `Smart contract is executing swaps: swapping ${simToken} into ${activeVault.allocations.map((a: any) => `${a.weight}% ${a.token.symbol}`).join(" and ")}...`}
+            {simState === "pooling" && `Routing component swap tokens to Merchant Moe LPs, staking LP tokens in yield farming pools...`}
+            {simState === "complete" && `Routing complete! LP staked. Compounding APY is generating returns below.`}
+          </div>
+        </div>
+      </div>
+
+      {simState === "complete" && (
+        <div className="p-4 rounded-xl bg-gradient-to-r from-[#00f5a0]/10 to-[#00d9f5]/10 border border-[#00f5a0]/30 flex flex-col sm:flex-row justify-between items-center gap-4 animate-fadeIn">
+          <div>
+            <h4 className="text-sm font-bold text-[#00f5a0] flex items-center gap-1.5">
+              <span className="pulse-dot" />
+              Real-Time Compounding Yield
+            </h4>
+            <p className="text-xs text-[#94a3b8]">Compounding simulated at 150x speed. APY: {apy}%. Watch your balance grow:</p>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-xs text-[#94a3b8] font-semibold">Simulated Yield Earned</span>
+            <span className="text-2xl font-mono font-bold text-emerald-400">
+              +${simYield.toFixed(6)}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 export default function App() {
   const { isConnected, address } = useAccount();
   const [demoMode, setDemoMode] = useState<boolean>(true);
@@ -595,9 +830,9 @@ export default function App() {
   }, [isTxConfirming, isTxConfirmed, web3WriteError]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#070913]">
+    <div className="flex flex-col min-h-screen bg-[#02040a]">
       {/* HEADER NAVBAR */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#070913]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#02040a]/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setAppMode("landing")}>
             <span className="text-2xl">🧺</span>
@@ -768,56 +1003,7 @@ export default function App() {
             </div>
 
             {/* FLOW DIAGRAM SECTION */}
-            <div className="glass-panel p-8">
-              <h2 className="text-2xl font-bold text-center text-[#f8fafc] mb-8">
-                How BasketFlow Simplifies DeFi Yield
-              </h2>
-
-              <div className="flow-steps-container">
-                {/* Step 1 */}
-                <div className="flex flex-col items-center text-center p-6 bg-white/2 border border-white/5 rounded-2xl relative">
-                  <div className="w-12 h-12 rounded-xl bg-[#00f5a0]/10 border border-[#00f5a0]/20 flex items-center justify-center text-2xl font-bold text-[#00f5a0] mb-4">
-                    1
-                  </div>
-                  <h4 className="text-base font-bold text-[#f8fafc] mb-2">Deposit Digital Dollars</h4>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
-                    Select a basket and deposit standard stablecoins (USDT/USDC) or MNT. You only sign a single transaction.
-                  </p>
-                </div>
-
-                {/* Arrow Connector 1 */}
-                <div className="hidden lg:flex justify-center text-2xl text-[#00f5a0] font-bold pointer-events-none">
-                  ➔
-                </div>
-
-                {/* Step 2 */}
-                <div className="flex flex-col items-center text-center p-6 bg-gradient-to-b from-[#00f5a0]/5 to-[#00d9f5]/5 border border-[#00f5a0]/20 rounded-2xl relative">
-                  <div className="w-12 h-12 rounded-xl bg-[#00f5a0]/20 border border-[#00f5a0]/40 flex items-center justify-center text-2xl font-bold text-[#00f5a0] mb-4 animate-pulse">
-                    ⚡
-                  </div>
-                  <h4 className="text-base font-bold text-[#00f5a0] mb-2">BasketFlow Auto-Routing</h4>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
-                    Our smart contract splits your deposit on-chain, swaps it for pool assets, adds liquidity to Merchant Moe LP pools, and stakes LP tokens in one transaction.
-                  </p>
-                </div>
-
-                {/* Arrow Connector 2 */}
-                <div className="hidden lg:flex justify-center text-2xl text-[#00d9f5] font-bold pointer-events-none">
-                  ➔
-                </div>
-
-                {/* Step 3 */}
-                <div className="flex flex-col items-center text-center p-6 bg-white/2 border border-white/5 rounded-2xl relative">
-                  <div className="w-12 h-12 rounded-xl bg-[#00d9f5]/10 border border-[#00d9f5]/20 flex items-center justify-center text-2xl font-bold text-[#00d9f5] mb-4">
-                    3
-                  </div>
-                  <h4 className="text-base font-bold text-[#f8fafc] mb-2">Earn Auto-Compounding Yield</h4>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
-                    Receive vault shares representing the LP tokens. Sit back and watch your yields compound continuously on-chain. Withdraw back to USDT at any time!
-                  </p>
-                </div>
-              </div>
-            </div>
+            <YieldRoutingVisualizer liveApys={liveApys} vaultsList={vaultsList} />
 
             {/* BASKETS PREVIEW SECTION */}
             <div>
