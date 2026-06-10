@@ -1,7 +1,5 @@
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, memo, useRef } from "react";
 import { 
-  TrendingUp, 
-  DollarSign, 
   Award, 
   ArrowUpRight, 
   ArrowDownLeft, 
@@ -9,9 +7,12 @@ import {
   ArrowLeft, 
   ShieldCheck, 
   Activity, 
-  BookOpen, 
   Plus, 
-  ChevronRight
+  ChevronRight,
+  Clock,
+  Compass,
+  Layers,
+  HelpCircle
 } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { 
@@ -22,7 +23,7 @@ import {
 import { parseUnits } from "viem";
 import { TOKENS, VAULTS, VAULT_ABI, ERC20_ABI } from "./contracts";
 
-// --- MEMOIZED COUNTERS & PERFORMANCE TICKERS ---
+// --- MEMOIZED COUNTERS & PERFORMANCE TICKERS (DIRECT-DOM OPTIMIZATION TO PREVENT LAGGING) ---
 interface InterestTickerProps {
   shares: Record<string, number>;
   liveApys: Record<string, number>;
@@ -31,53 +32,62 @@ interface InterestTickerProps {
   prefix?: string;
 }
 
-export const InterestTicker = memo(({ shares, liveApys, vaultsList, speedUp = 2.5, prefix = "" }: InterestTickerProps) => {
-  const [interest, setInterest] = useState(0.0);
+export const InterestTicker = memo(({ shares, liveApys, vaultsList, speedUp = 3.0, prefix = "" }: InterestTickerProps) => {
+  const spanRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let totalYieldPerSecond = 0;
     Object.keys(vaultsList).forEach((key) => {
       const shareBal = shares[key] || 0;
       const apy = liveApys[key] || 10.0;
-      const positionYieldPerSecond = (shareBal * 1.0 * (apy / 100)) / (365 * 24 * 3600);
+      // Yield formula: (Balance * APY%) / (Seconds in year * 100)
+      const positionYieldPerSecond = (shareBal * (apy / 100)) / (365 * 24 * 3600);
       totalYieldPerSecond += positionYieldPerSecond;
     });
 
     if (totalYieldPerSecond === 0) {
-      setInterest(0);
+      if (spanRef.current) spanRef.current.textContent = `${prefix}$0.000000`;
       return;
     }
 
+    let currentAccrued = 0;
+    const intervalMs = 60; // 16 FPS updates
+    const increment = (totalYieldPerSecond * (intervalMs / 1000)) * speedUp;
+
     const timer = setInterval(() => {
-      setInterest((prev) => prev + (totalYieldPerSecond / 10) * speedUp);
-    }, 100);
+      currentAccrued += increment;
+      if (spanRef.current) {
+        spanRef.current.textContent = `${prefix}$${currentAccrued.toFixed(6)}`;
+      }
+    }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [shares, liveApys, vaultsList, speedUp]);
+  }, [shares, liveApys, vaultsList, speedUp, prefix]);
 
-  return <span className="yield-ticker text-emerald-400 font-bold">{prefix}${interest.toFixed(6)}</span>;
+  return <span ref={spanRef} className="yield-ticker text-emerald-400 font-bold font-mono">{prefix}$0.000000</span>;
 });
 
+// --- PERFORMANCE SVG CHART ---
 export const PerformanceChart = memo(({ vaultKey }: { vaultKey: string }) => {
   let pathD = "M0,80 Q70,75 140,55 T280,45 T420,25 T500,15";
   let areaD = "M0,80 Q70,75 140,55 T280,45 T420,25 T500,15 L500,100 L0,100 Z";
-  let colorStart = "#00ff9d";
+  let colorStart = "#00ff88";
   let colorEnd = "#00e5ff";
   
   if (vaultKey === "stableShuffle") {
-    pathD = "M0,70 Q90,72 180,68 T360,65 T500,60";
-    areaD = "M0,70 Q90,72 180,68 T360,65 T500,60 L500,100 L0,100 Z";
-    colorStart = "#8b5cf6";
-    colorEnd = "#d946ef";
+    pathD = "M0,75 Q90,78 180,72 T360,70 T500,68";
+    areaD = "M0,75 Q90,78 180,72 T360,70 T500,68 L500,100 L0,100 Z";
+    colorStart = "#6366f1";
+    colorEnd = "#a855f7";
   } else if (vaultKey === "moePowerhouse" || vaultKey === "hyperDrive") {
-    pathD = "M0,85 Q60,70 120,80 T240,40 T360,60 T500,10";
-    areaD = "M0,85 Q60,70 120,80 T240,40 T360,60 T500,10 L500,100 L0,100 Z";
+    pathD = "M0,85 Q60,65 120,78 T240,35 T360,55 T500,8";
+    areaD = "M0,85 Q60,65 120,78 T240,35 T360,55 T500,8 L500,100 L0,100 Z";
     colorStart = "#fbbf24";
     colorEnd = "#f43f5e";
   } else if (vaultKey === "mantleMax") {
-    pathD = "M0,75 Q80,50 160,60 T320,30 T500,5";
-    areaD = "M0,75 Q80,50 160,60 T320,30 T500,5 L500,100 L0,100 Z";
-    colorStart = "#10b981";
+    pathD = "M0,70 Q80,45 160,58 T320,28 T500,4";
+    areaD = "M0,70 Q80,45 160,58 T320,28 T500,4 L500,100 L0,100 Z";
+    colorStart = "#00ff88";
     colorEnd = "#059669";
   }
 
@@ -85,14 +95,14 @@ export const PerformanceChart = memo(({ vaultKey }: { vaultKey: string }) => {
   const gradIdArea = `areaGrad-${vaultKey}`;
 
   return (
-    <div className="w-full h-48 bg-black/20 rounded-xl border border-white/5 p-2 relative">
+    <div className="w-full h-40 bg-black/30 rounded-xl border border-white/5 p-2 relative">
       <svg viewBox="0 0 500 100" className="w-full h-full overflow-visible">
-        <line x1="0" y1="20" x2="500" y2="20" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-        <line x1="0" y1="50" x2="500" y2="50" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-        <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+        <line x1="0" y1="20" x2="500" y2="20" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+        <line x1="0" y1="50" x2="500" y2="50" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
+        <line x1="0" y1="80" x2="500" y2="80" stroke="rgba(255,255,255,0.02)" strokeWidth="1" />
         
-        <path d={areaD} fill={`url(#${gradIdArea})`} className="chart-area" />
-        <path d={pathD} fill="none" stroke={`url(#${gradIdLine})`} strokeWidth="2.5" strokeLinecap="round" className="chart-line" />
+        <path d={areaD} fill={`url(#${gradIdArea})`} style={{ opacity: 0.15 }} />
+        <path d={pathD} fill="none" stroke={`url(#${gradIdLine})`} strokeWidth="2.5" strokeLinecap="round" />
         
         <defs>
           <linearGradient id={gradIdLine} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -100,56 +110,59 @@ export const PerformanceChart = memo(({ vaultKey }: { vaultKey: string }) => {
             <stop offset="100%" stopColor={colorEnd} />
           </linearGradient>
           <linearGradient id={gradIdArea} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={colorStart} stopOpacity="0.25" />
+            <stop offset="0%" stopColor={colorStart} stopOpacity="0.3" />
             <stop offset="100%" stopColor={colorStart} stopOpacity="0.0" />
           </linearGradient>
         </defs>
       </svg>
-      <div className="absolute bottom-2 left-2 text-[10px] text-[#64748b]">30 Days Ago</div>
-      <div className="absolute bottom-2 right-2 text-[10px] text-[#64748b]">Today</div>
+      <div className="absolute bottom-1.5 left-2.5 text-[9px] text-slate-500 font-bold font-mono">30D AGO</div>
+      <div className="absolute bottom-1.5 right-2.5 text-[9px] text-slate-500 font-bold font-mono">TODAY</div>
     </div>
   );
 });
 
+// --- ALLOCATION DONUT CHART ---
 export const CompositionChart = memo(({ allocations }: { allocations: any[] }) => {
   return (
     <div className="flex justify-center">
-      <svg width="160" height="160" viewBox="0 0 36 36" className="overflow-visible transform -rotate-90">
-        <circle cx="18" cy="18" r="15.91549430918954" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="4.5" />
+      <svg width="130" height="130" viewBox="0 0 36 36" className="overflow-visible transform -rotate-90">
+        <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="4.5" />
         
         {allocations.map((alloc: any, idx: number) => {
           let previousWeightsSum = 0;
           for (let i = 0; i < idx; i++) {
             previousWeightsSum += allocations[i].weight;
           }
+          const strokeColors = ["#00ff88", "#00e5ff", "#6366f1", "#fbbf24"];
+          const strokeColor = strokeColors[idx % strokeColors.length];
           return (
             <circle 
               key={idx}
               cx="18" 
               cy="18" 
-              r="15.91549430918954" 
+              r="15.9" 
               fill="none" 
-              stroke={idx === 0 ? "#00ff9d" : idx === 1 ? "#00e5ff" : "#8b5cf6"} 
+              stroke={strokeColor} 
               strokeWidth="4.5" 
               strokeDasharray={`${alloc.weight} ${100 - alloc.weight}`} 
               strokeDashoffset={100 - previousWeightsSum + 25} 
-              className="transition-all duration-500 hover:stroke-[6px] cursor-pointer"
+              className="transition-all duration-300 hover:stroke-[5.5px] cursor-pointer"
             />
           );
         })}
         
-        <circle cx="18" cy="18" r="11" fill="#02040a" />
+        <circle cx="18" cy="18" r="11" fill="#050814" />
         
         <g transform="rotate(90 18 18)">
-          <text x="18" y="16.5" textAnchor="middle" fill="#94a3b8" fontSize="2.8" fontWeight="700" letterSpacing="0.1">WEIGHTS</text>
-          <text x="18" y="21" textAnchor="middle" fill="#f8fafc" fontSize="4.2" fontWeight="800">Classic</text>
+          <text x="18" y="16.5" textAnchor="middle" fill="#64748b" fontSize="2.8" fontWeight="800" letterSpacing="0.05">SPLITS</text>
+          <text x="18" y="21" textAnchor="middle" fill="#f8fafc" fontSize="3.8" fontWeight="800">LP Assets</text>
         </g>
       </svg>
     </div>
   );
 });
 
-// --- INTERACTIVE YIELD ROUTING PLAYGROUND ---
+// --- HIGH-FIDELITY ROUTING VISUALIZER (SVG NATIVE ANIMATED PIPELINE) ---
 interface YieldRoutingVisualizerProps {
   liveApys: Record<string, number>;
   vaultsList: Record<string, any>;
@@ -160,9 +173,8 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
   const [simToken, setSimToken] = useState<"USDT" | "USDC" | "MNT">("USDT");
   const [simVaultKey, setSimVaultKey] = useState<string>("conservative");
   const [simState, setSimState] = useState<"idle" | "routing" | "swapping" | "pooling" | "complete">("idle");
-  const [simProgress, setSimProgress] = useState<number>(0);
-  const [simYield, setSimYield] = useState<number>(0.0);
-
+  
+  const simYieldSpanRef = useRef<HTMLSpanElement>(null);
   const activeVault = vaultsList[simVaultKey] || vaultsList["conservative"];
   const apy = liveApys[simVaultKey] || 10.0;
 
@@ -171,25 +183,27 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
     let yieldInterval: any;
 
     if (simState === "routing") {
-      setSimProgress(15);
-      timer = setTimeout(() => setSimState("swapping"), 1200);
+      timer = setTimeout(() => setSimState("swapping"), 1500);
     } else if (simState === "swapping") {
-      setSimProgress(50);
       timer = setTimeout(() => setSimState("pooling"), 1500);
     } else if (simState === "pooling") {
-      setSimProgress(80);
-      timer = setTimeout(() => setSimState("complete"), 1200);
+      timer = setTimeout(() => setSimState("complete"), 1500);
     } else if (simState === "complete") {
-      setSimProgress(100);
       const amount = parseFloat(simAmount) || 1000;
       const yieldPerSecond = (amount * (apy / 100)) / (365 * 24 * 3600);
-      const speedUp = 150;
+      const speedUp = 300; // Accelerated compound speed
+
+      let accrued = 0;
       yieldInterval = setInterval(() => {
-        setSimYield((prev) => prev + (yieldPerSecond / 10) * speedUp);
-      }, 100);
+        accrued += (yieldPerSecond * 0.05) * speedUp;
+        if (simYieldSpanRef.current) {
+          simYieldSpanRef.current.textContent = `+$${accrued.toFixed(6)}`;
+        }
+      }, 50);
     } else if (simState === "idle") {
-      setSimProgress(0);
-      setSimYield(0.0);
+      if (simYieldSpanRef.current) {
+        simYieldSpanRef.current.textContent = "+$0.000000";
+      }
     }
 
     return () => {
@@ -199,27 +213,35 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
   }, [simState, simAmount, apy]);
 
   return (
-    <div className="glass-panel p-6 bg-black/40 border border-[#00ff9d]/10 relative overflow-hidden flex flex-col gap-6">
-      <div className="absolute -top-32 -right-32 w-64 h-64 bg-[#00ff9d]/5 rounded-full blur-[90px] pointer-events-none" />
-      
-      <div>
-        <h4 className="text-base font-bold text-[#f8fafc] mb-1">Interactive Yield Router</h4>
-        <p className="text-xs text-[#94a3b8]">Simulate how BasketFlow splits, swaps, and stakes assets in a single click.</p>
+    <div className="panel p-6 bg-black/40 border border-white/5 relative overflow-hidden flex flex-col gap-6">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+        <div>
+          <h4 className="text-base font-bold text-white mb-1">Interactive Yield Router</h4>
+          <p className="text-xs text-slate-400">Simulate how BasketFlow splits, swaps, and stakes assets in a single click.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="pulse-dot" />
+          <span className="text-[10px] text-[#00ff88] font-bold uppercase tracking-wider font-mono">Routing Active</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-        {/* Controls */}
-        <div className="p-4 bg-white/2 border border-white/5 rounded-2xl flex flex-col justify-between gap-4">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-wider">Input Asset</label>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        {/* Left Inputs Card */}
+        <div className="p-5 bg-white/2 border border-white/5 rounded-2xl flex flex-col justify-between gap-4">
+          <div className="flex flex-col gap-4">
+            <div className="input-group">
+              <label className="input-label">Select Input Asset</label>
               <div className="flex gap-2">
                 {(["USDT", "USDC", "MNT"] as const).map((t) => (
                   <button
                     key={t}
                     disabled={simState !== "idle"}
                     onClick={() => setSimToken(t)}
-                    className={`flex-1 py-1 rounded-lg text-xs font-bold border transition-all ${simToken === t ? "bg-[#00ff9d]/10 border-[#00ff9d]/40 text-[#00ff9d]" : "bg-black/20 border-white/5 text-[#94a3b8]"}`}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      simToken === t 
+                        ? "bg-[#00ff88]/10 border-[#00ff88]/40 text-[#00ff88]" 
+                        : "bg-black/20 border-white/5 text-slate-400 hover:text-white"
+                    }`}
                   >
                     {t}
                   </button>
@@ -227,24 +249,28 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
               </div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-wider">Amount</label>
-              <input
-                type="number"
-                disabled={simState !== "idle"}
-                value={simAmount}
-                onChange={(e) => setSimAmount(e.target.value)}
-                className="bg-black/40 border border-white/5 text-white rounded-lg px-2.5 py-1 text-xs font-semibold outline-none focus:border-[#00ff9d]"
-              />
+            <div className="input-group">
+              <label className="input-label">Simulated Amount</label>
+              <div className="input-container">
+                <input
+                  type="number"
+                  disabled={simState !== "idle"}
+                  value={simAmount}
+                  onChange={(e) => setSimAmount(e.target.value)}
+                  className="input-field"
+                />
+                <span className="text-xs text-slate-400 font-bold ml-2">{simToken}</span>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-wider">Target Vault</label>
+            <div className="input-group">
+              <label className="input-label">Target Strategy Basket</label>
               <select
                 disabled={simState !== "idle"}
                 value={simVaultKey}
                 onChange={(e) => setSimVaultKey(e.target.value)}
-                className="bg-black/40 border border-white/5 text-white rounded-lg px-2 py-1 text-xs font-semibold outline-none focus:border-[#00ff9d]"
+                className="token-select w-full"
+                style={{ padding: '8px 12px' }}
               >
                 {Object.keys(vaultsList).map((key) => (
                   <option key={key} value={key}>{vaultsList[key].name}</option>
@@ -255,7 +281,11 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
 
           <button
             onClick={() => setSimState(simState === "idle" ? "routing" : "idle")}
-            className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${simState === "idle" ? "glow-btn-primary" : "btn-secondary text-red-400 border-red-500/10 hover:bg-red-500/5 hover:border-red-500/25"}`}
+            className={`w-full py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              simState === "idle" 
+                ? "btn-primary" 
+                : "btn-secondary text-rose-400 border-rose-500/10 hover:bg-rose-500/5 hover:border-rose-500/25"
+            }`}
           >
             {simState === "idle" ? (
               <>
@@ -268,76 +298,153 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
           </button>
         </div>
 
-        {/* Nodes Canvas */}
-        <div className="md:col-span-2 p-4 bg-white/2 border border-white/5 rounded-2xl flex flex-col justify-between relative min-h-[200px] overflow-hidden">
-          <div className="absolute top-1/2 left-6 right-6 h-[1px] bg-white/5 -translate-y-1/2 pointer-events-none z-0 hidden sm:block" />
-          {simProgress > 0 && (
-            <div 
-              style={{ width: `${simProgress - 15}%` }}
-              className="absolute top-1/2 left-6 h-[1px] bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] -translate-y-1/2 pointer-events-none z-0 transition-all duration-1000 hidden sm:block" 
-            />
-          )}
+        {/* Right Node Canvas Visualizer */}
+        <div className="lg:col-span-2 p-4 bg-black/40 border border-white/5 rounded-2xl flex flex-col justify-between relative min-h-[220px]">
+          
+          {/* Node SVG network */}
+          <div className="w-full h-full relative min-h-[170px] flex items-center justify-center">
+            <svg viewBox="0 0 600 160" className="w-full h-full absolute inset-0 z-0 overflow-visible">
+              
+              {/* Pipeline paths */}
+              {/* Path 1: Wallet -> Router */}
+              <path d="M 50,80 L 220,80" stroke={simState !== "idle" ? "rgba(0, 255, 136, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2.5" fill="none" />
+              
+              {/* Path 2A: Router -> Token A */}
+              <path d="M 220,80 C 270,80 290,40 370,40" stroke={simState === "swapping" || simState === "pooling" || simState === "complete" ? "rgba(0, 229, 255, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              
+              {/* Path 2B: Router -> Token B */}
+              <path d="M 220,80 C 270,80 290,120 370,120" stroke={simState === "swapping" || simState === "pooling" || simState === "complete" ? "rgba(0, 229, 255, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              
+              {/* Path 3A: Token A -> Vault */}
+              <path d="M 370,40 C 450,40 470,80 540,80" stroke={simState === "pooling" || simState === "complete" ? "rgba(99, 102, 241, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              
+              {/* Path 3B: Token B -> Vault */}
+              <path d="M 370,120 C 450,120 470,80 540,80" stroke={simState === "pooling" || simState === "complete" ? "rgba(99, 102, 241, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
 
-          <div className="flex items-center gap-2 mb-3 z-10">
-            <span className="w-5 h-5 rounded-full bg-[#00ff9d]/10 border border-[#00ff9d]/30 text-[10px] font-bold text-[#00ff9d] flex items-center justify-center">2</span>
-            <span className="text-xs font-bold text-[#f8fafc]">Routing Visualizer</span>
-          </div>
+              {/* Animated Particles flowing using browser-native animateMotion (NO CPU LAG) */}
+              {simState === "routing" && (
+                <circle r="4.5" fill="#00ff88">
+                  <animateMotion dur="1.2s" repeatCount="indefinite" path="M 50,80 L 220,80" />
+                </circle>
+              )}
+              
+              {(simState === "swapping") && (
+                <>
+                  <circle r="3.5" fill="#00e5ff">
+                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 220,80 C 270,80 290,40 370,40" />
+                  </circle>
+                  <circle r="3.5" fill="#00e5ff">
+                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 220,80 C 270,80 290,120 370,120" />
+                  </circle>
+                </>
+              )}
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10 my-auto">
-            {/* Input Node */}
-            <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-xl border bg-black/40 transition-all duration-500 ${simState !== "idle" ? "border-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.15)]" : "border-white/5"}`}>
-              <span className="text-xl mb-0.5">💳</span>
-              <span className="text-[9px] font-bold text-[#f8fafc]">{simAmount}</span>
-              <span className="text-[7px] text-[#94a3b8] uppercase font-semibold">{simToken}</span>
+              {(simState === "pooling") && (
+                <>
+                  <circle r="3.5" fill="#6366f1">
+                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 370,40 C 450,40 470,80 540,80" />
+                  </circle>
+                  <circle r="3.5" fill="#6366f1">
+                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 370,120 C 450,120 470,80 540,80" />
+                  </circle>
+                </>
+              )}
+
+              {simState === "complete" && (
+                <>
+                  <circle r="3" fill="#00ff88" opacity="0.8">
+                    <animateMotion dur="2s" repeatCount="indefinite" path="M 50,80 L 220,80" />
+                  </circle>
+                  <circle r="3" fill="#00e5ff" opacity="0.8">
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 220,80 C 270,80 290,40 370,40" />
+                  </circle>
+                  <circle r="3" fill="#00e5ff" opacity="0.8">
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 220,80 C 270,80 290,120 370,120" />
+                  </circle>
+                  <circle r="3" fill="#6366f1" opacity="0.8">
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 370,40 C 450,40 470,80 540,80" />
+                  </circle>
+                  <circle r="3" fill="#6366f1" opacity="0.8">
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 370,120 C 450,120 470,80 540,80" />
+                  </circle>
+                </>
+              )}
+            </svg>
+
+            {/* Wallet Node */}
+            <div className="absolute left-[15px] flex flex-col items-center">
+              <div className={`w-14 h-14 rounded-xl border bg-black/60 flex flex-col items-center justify-center transition-all duration-300 z-10 ${
+                simState !== "idle" ? "border-[#00ff88] shadow-[0_0_12px_rgba(0,255,136,0.15)]" : "border-white/5"
+              }`}>
+                <span className="text-lg">💳</span>
+                <span className="text-[9px] font-bold text-white mt-0.5">{simAmount}</span>
+              </div>
+              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 font-mono">{simToken}</span>
             </div>
-
-            {/* Path 1 */}
-            <span className={`text-sm animate-pulse hidden sm:inline ${simState === "routing" ? "text-[#00ff9d]" : "text-[#4b5563]"}`}>➔</span>
 
             {/* Router Node */}
-            <div className={`flex flex-col items-center justify-center w-20 h-20 rounded-full border bg-black/60 transition-all duration-500 relative ${
-              simState === "swapping" ? "border-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.2)] scale-105" :
-              simState === "pooling" || simState === "complete" ? "border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.1)]" :
-              "border-white/5"
-            }`}>
-              {simState === "swapping" && (
-                <div className="absolute inset-1.5 border border-dashed border-[#00ff9d] rounded-full animate-spin pointer-events-none" />
-              )}
-              <span className="text-xl mb-0.5">🧺</span>
-              <span className="text-[8px] font-bold text-[#f8fafc] text-center leading-none">Router</span>
+            <div className="absolute left-[190px] flex flex-col items-center">
+              <div className={`w-16 h-16 rounded-full border bg-black/80 flex flex-col items-center justify-center transition-all duration-500 z-10 relative ${
+                simState === "swapping" ? "border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.2)] scale-105" :
+                simState === "pooling" || simState === "complete" ? "border-[#6366f1] shadow-[0_0_10px_rgba(99,102,241,0.15)]" : "border-white/5"
+              }`}>
+                {simState === "swapping" && (
+                  <div className="absolute inset-1 border border-dashed border-[#00e5ff] rounded-full animate-spin" />
+                )}
+                <span className="text-lg">🧺</span>
+                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 font-mono">ROUTER</span>
+              </div>
             </div>
 
-            {/* Path 2 */}
-            <span className={`text-sm animate-pulse hidden sm:inline ${simState === "pooling" ? "text-[#00e5ff]" : "text-[#4b5563]"}`}>➔</span>
+            {/* LP Splits Node (Token A / B) */}
+            <div className="absolute left-[340px] flex flex-col gap-6 justify-between h-[150px] py-1.5">
+              <div className={`w-14 h-10 rounded-lg border bg-black/60 flex flex-col items-center justify-center transition-all duration-500 z-10 ${
+                simState === "swapping" || simState === "pooling" || simState === "complete" ? "border-[#00e5ff]" : "border-white/5"
+              }`}>
+                <span className="text-[10px] font-bold text-white font-mono">{activeVault.allocations[0]?.token.symbol || "USDT"}</span>
+                <span className="text-[8px] text-[#00e5ff] font-bold font-mono">{activeVault.allocations[0]?.weight || 50}%</span>
+              </div>
+              <div className={`w-14 h-10 rounded-lg border bg-black/60 flex flex-col items-center justify-center transition-all duration-500 z-10 ${
+                simState === "swapping" || simState === "pooling" || simState === "complete" ? "border-[#00e5ff]" : "border-white/5"
+              }`}>
+                <span className="text-[10px] font-bold text-white font-mono">{activeVault.allocations[1]?.token.symbol || "USDC"}</span>
+                <span className="text-[8px] text-[#00e5ff] font-bold font-mono">{activeVault.allocations[1]?.weight || 50}%</span>
+              </div>
+            </div>
 
-            {/* Vault Node */}
-            <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-xl border bg-black/40 transition-all duration-500 ${simState === "complete" ? "border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.2)] scale-105" : "border-white/5"}`}>
-              <span className="text-xl mb-0.5">🛡️</span>
-              <span className="text-[9px] font-bold text-[#f8fafc]">{activeVault.symbol}</span>
-              <span className="text-[7px] text-[#00e5ff] uppercase font-semibold">Staked</span>
+            {/* Target Vault Node */}
+            <div className="absolute right-[15px] flex flex-col items-center">
+              <div className={`w-15 h-15 rounded-xl border bg-black/60 flex flex-col items-center justify-center transition-all duration-300 z-10 ${
+                simState === "complete" ? "border-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.3)] scale-105" : "border-white/5"
+              }`}>
+                <span className="text-xl">🛡️</span>
+                <span className="text-[9px] font-black text-white mt-0.5">{activeVault.symbol}</span>
+              </div>
+              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 font-mono">STAKED</span>
             </div>
           </div>
 
-          <div className="mt-3 p-2 rounded-lg bg-black/30 border border-white/5 text-center text-[10px] text-[#94a3b8]">
-            {simState === "idle" && "Trigger 'Simulate Routing' to start the demo flow."}
-            {simState === "routing" && `Validating and routing ${simAmount} ${simToken} on Mantle...`}
-            {simState === "swapping" && `Swapping ${simToken} to constituent LP pool tokens...`}
-            {simState === "pooling" && `Depositing swaps into Moe Pools and staking LPs in compounder...`}
-            {simState === "complete" && `Vault shares issued. Compounding yield accrues below:`}
+          {/* Description status updates */}
+          <div className="p-3 bg-black/40 border border-white/5 rounded-xl text-center text-[10.5px] text-slate-400 font-medium">
+            {simState === "idle" && "Configure inputs and select 'Simulate Routing' to start the transaction flow."}
+            {simState === "routing" && `Analyzing liquidity routes for ${simAmount} ${simToken} on Mantle network...`}
+            {simState === "swapping" && `Swapping ${simToken} into dynamic LP pool tokens at optimum rates...`}
+            {simState === "pooling" && `Depositing splits into Moe liquidity pools & acquiring compounder shares...`}
+            {simState === "complete" && `Vault shares issued to wallet. Auto-compounding yield accrues below:`}
           </div>
         </div>
       </div>
 
       {simState === "complete" && (
-        <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#00ff9d]/5 to-[#00e5ff]/5 border border-[#00ff9d]/20 flex justify-between items-center animate-fadeIn">
+        <div className="p-4 rounded-xl bg-gradient-to-r from-[#00ff88]/5 to-[#00e5ff]/5 border border-[#00ff88]/15 flex justify-between items-center animate-float">
           <div>
-            <h5 className="text-xs font-bold text-[#00ff9d] flex items-center gap-1.5">
+            <h5 className="text-xs font-bold text-[#00ff88] flex items-center gap-1.5">
               <span className="pulse-dot" />
               Compounding Active
             </h5>
-            <p className="text-[10px] text-[#94a3b8]">Compounding mock yield at 150x speed (APY: {apy}%):</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Compounding mock yield at 300x speed (Strategy APY: {apy}%):</p>
           </div>
-          <span className="text-lg font-mono font-bold text-[#00ff9d]">+${simYield.toFixed(6)}</span>
+          <span ref={simYieldSpanRef} className="text-lg font-mono font-bold text-[#00ff88] animate-pulse">+$0.000000</span>
         </div>
       )}
     </div>
@@ -349,7 +456,7 @@ export default function App() {
   const { isConnected, address } = useAccount();
   const [demoMode, setDemoMode] = useState<boolean>(true);
   const [appMode, setAppMode] = useState<"landing" | "app">("landing");
-  const [currentView, setCurrentView] = useState<"baskets" | "dashboard" | "leaderboard" | "detail">("baskets");
+  const [currentView, setCurrentView] = useState<"baskets" | "detail" | "dashboard" | "leaderboard" | "synthesizer">("baskets");
   
   // Custom states
   const [vaultsList, setVaultsList] = useState<Record<string, any>>(VAULTS);
@@ -368,13 +475,14 @@ export default function App() {
       initialShares[key] = 0.0;
     });
     return {
-      USDT: 2000.0,
-      USDC: 1200.0,
-      MNT: 600.0,
+      USDT: 5000.0,
+      USDC: 3500.0,
+      MNT: 1200.0,
       shares: initialShares,
     };
   });
 
+  // Action variables
   const [txAmount, setTxAmount] = useState<string>("");
   const [txToken, setTxToken] = useState<"USDT" | "USDC" | "MNT">("USDT");
   const [txModalOpen, setTxModalOpen] = useState<boolean>(false);
@@ -383,9 +491,9 @@ export default function App() {
   const [txStep, setTxStep] = useState<number>(0);
   const [txError, setTxError] = useState<string>("");
 
-  // Live simulation states
-  const [liveTVL, setLiveTVL] = useState<number>(2438720);
-  const [liveDepositors, setLiveDepositors] = useState<number>(3842);
+  // Live stats triggers
+  const [liveTVL, setLiveTVL] = useState<number>(3824000);
+  const [liveDepositors, setLiveDepositors] = useState<number>(4590);
   const [liveApys, setLiveApys] = useState<Record<string, number>>(() => {
     const initialApys: Record<string, number> = {};
     Object.keys(VAULTS).forEach((key) => {
@@ -397,40 +505,39 @@ export default function App() {
   const [apyDirection, setApyDirection] = useState<Record<string, "up" | "down" | "flat">>({});
 
   const [activities, setActivities] = useState<Array<{ id: number; text: string; time: string }>>([
-    { id: 1, text: "0x8f...4e deposited $1,200 into Stable Shuffle", time: "Just now" },
-    { id: 2, text: "vitalik.mnt deposited $25,000 into Mantle Max", time: "2m ago" },
-    { id: 3, text: "0x3d...7c withdrew $400 from Conservative Care", time: "5m ago" },
+    { id: 1, text: "0x8a...4b deposited $2,500 into Moe Powerhouse", time: "Just now" },
+    { id: 2, text: "replytim.mnt staked $1,200 in Stable Shuffle", time: "3m ago" },
+    { id: 3, text: "0x9c...7f withdrew $600 from Conservative Care", time: "8m ago" },
   ]);
 
   // Onboarding Tutorial slides
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(false);
   const [tutorialStep, setTutorialStep] = useState<number>(0);
 
-  // Custom Basket states
-  const [createBasketModalOpen, setCreateBasketModalOpen] = useState<boolean>(false);
-  const [newBasketName, setNewBasketName] = useState<string>("");
-  const [newBasketTokenA, setNewBasketTokenA] = useState<keyof typeof TOKENS>("USDC");
-  const [newBasketTokenB, setNewBasketTokenB] = useState<keyof typeof TOKENS>("mETH");
-  const [newBasketWeightA, setNewBasketWeightA] = useState<number>(50);
-  const [newBasketRisk, setNewBasketRisk] = useState<string>("Low");
-  const [newBasketApy, setNewBasketApy] = useState<string>("12.5");
-  const [newBasketDesc, setNewBasketDesc] = useState<string>("");
-  const [createBasketStep, setCreateBasketStep] = useState<number>(0);
-  const [createBasketStatus, setCreateBasketStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [createBasketError, setCreateBasketError] = useState<string>("");
+  // Strategy Creator / Synthesizer states
+  const [synthName, setSynthName] = useState<string>("");
+  const [synthTokenA, setSynthTokenA] = useState<keyof typeof TOKENS>("USDC");
+  const [synthTokenB, setSynthTokenB] = useState<keyof typeof TOKENS>("mETH");
+  const [synthWeightA, setSynthWeightA] = useState<number>(50);
+  const [synthRisk, setSynthRisk] = useState<string>("Medium");
+  const [synthApy, setSynthApy] = useState<string>("16.5");
+  const [synthDesc, setSynthDesc] = useState<string>("");
+  const [synthStatus, setSynthStatus] = useState<"idle" | "compiling" | "broadcasting" | "success" | "error">("idle");
+  const [synthLogs, setSynthLogs] = useState<string[]>([]);
+  const [synthError, setSynthError] = useState<string>("");
 
-  // Real Web3 triggers
+  // Real Web3 hooks
   const { writeContract, data: txHash, error: web3WriteError } = useWriteContract();
   const { isLoading: isTxConfirming, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // Fluctuate stats
+  // APY dynamic fluctuation loops
   useEffect(() => {
     const timer = setInterval(() => {
       setLiveApys((prev) => {
         const next = { ...prev };
         const dirs: Record<string, "up" | "down" | "flat"> = {};
         Object.keys(next).forEach((key) => {
-          const change = (Math.random() - 0.5) * 0.2;
+          const change = (Math.random() - 0.5) * 0.25;
           const oldVal = next[key];
           let newVal = oldVal + change;
           
@@ -447,36 +554,36 @@ export default function App() {
           dirs[key] = change > 0 ? "up" : change < 0 ? "down" : "flat";
         });
         setApyDirection(dirs);
-        setTimeout(() => setApyDirection({}), 2000);
+        setTimeout(() => setApyDirection({}), 2200);
         return next;
       });
-      setLiveTVL((prev) => prev + Math.floor((Math.random() - 0.4) * 200));
-      setLiveDepositors((prev) => prev + (Math.random() > 0.8 ? 1 : Math.random() < 0.2 ? -1 : 0));
-    }, 5000);
+      setLiveTVL((prev) => prev + Math.floor((Math.random() - 0.45) * 350));
+      setLiveDepositors((prev) => prev + (Math.random() > 0.85 ? 1 : Math.random() < 0.15 ? -1 : 0));
+    }, 6000);
     return () => clearInterval(timer);
   }, [vaultsList]);
 
-  // Simulated activity feed
+  // Dynamic activity explorer tick feeds
   useEffect(() => {
-    const feed = ["0x2a", "replytim", "vitalik", "0xef", "0x5d", "dan.mnt"];
-    const acts = ["deposited", "withdrew"];
-    const values = [250, 600, 1500, 4000, 9000];
+    const addresses = ["0x8a", "vitalik.mnt", "replytim.eth", "0xef", "0x5d", "mimi.mnt", "dan.mnt"];
+    const actions = ["deposited", "withdrew"];
+    const values = [500, 1200, 3000, 7500, 15000];
 
     const timer = setInterval(() => {
       const keys = Object.keys(vaultsList);
       if (keys.length === 0) return;
       const key = keys[Math.floor(Math.random() * keys.length)];
-      const act = acts[Math.floor(Math.random() * acts.length)];
-      const val = values[Math.floor(Math.random() * values.length)];
-      const name = feed[Math.floor(Math.random() * feed.length)] + (Math.random() > 0.5 ? ".eth" : "...7c");
+      const action = actions[Math.floor(Math.random() * actions.length)];
+      const amount = values[Math.floor(Math.random() * values.length)];
+      const user = addresses[Math.floor(Math.random() * addresses.length)] + (Math.random() > 0.6 ? "" : "...3e");
       
-      const newText = `${name} ${act} $${val.toLocaleString()} ${act === "deposited" ? "into" : "from"} ${vaultsList[key].name}`;
-      setActivities((prev) => [{ id: Date.now(), text: newText, time: "Just now" }, ...prev.slice(0, 2)]);
-    }, 8000);
+      const text = `${user} ${action} $${amount.toLocaleString()} ${action === "deposited" ? "into" : "from"} ${vaultsList[key].name}`;
+      setActivities((prev) => [{ id: Date.now(), text, time: "Just now" }, ...prev.slice(0, 2)]);
+    }, 9000);
     return () => clearInterval(timer);
   }, [vaultsList]);
 
-  // Execute Deposit / Withdraw
+  // Execute Deposit / Withdraw transactions
   const handleExecuteTx = async (type: "deposit" | "withdraw") => {
     if (!txAmount || parseFloat(txAmount) <= 0) return;
     setTxType(type);
@@ -486,42 +593,44 @@ export default function App() {
 
     if (demoMode) {
       try {
-        const val = parseFloat(txAmount);
+        const amount = parseFloat(txAmount);
         if (type === "deposit") {
-          if (demoBalances[txToken] < val) throw new Error("Insufficient balance in mock wallet.");
-          setTxStep(1); await new Promise((res) => setTimeout(res, 1200));
+          if (demoBalances[txToken] < amount) throw new Error("Insufficient balance in simulated wallet.");
+          
+          setTxStep(1); await new Promise((res) => setTimeout(res, 1000));
           setTxStep(2); await new Promise((res) => setTimeout(res, 1200));
           setTxStep(3); await new Promise((res) => setTimeout(res, 1200));
           setTxStep(4); await new Promise((res) => setTimeout(res, 800));
 
           setDemoBalances((prev) => ({
             ...prev,
-            [txToken]: prev[txToken] - val,
-            shares: { ...prev.shares, [selectedVaultKey]: prev.shares[selectedVaultKey] + val }
+            [txToken]: prev[txToken] - amount,
+            shares: { ...prev.shares, [selectedVaultKey]: prev.shares[selectedVaultKey] + amount }
           }));
         } else {
-          if (demoBalances.shares[selectedVaultKey] < val) throw new Error("Insufficient shares to withdraw.");
-          setTxStep(1); await new Promise((res) => setTimeout(res, 1200));
+          if (demoBalances.shares[selectedVaultKey] < amount) throw new Error("Insufficient strategy shares to withdraw.");
+          
+          setTxStep(1); await new Promise((res) => setTimeout(res, 1000));
           setTxStep(2); await new Promise((res) => setTimeout(res, 1200));
           setTxStep(3); await new Promise((res) => setTimeout(res, 1200));
           setTxStep(4); await new Promise((res) => setTimeout(res, 800));
 
           setDemoBalances((prev) => ({
             ...prev,
-            [txToken]: prev[txToken] + val,
-            shares: { ...prev.shares, [selectedVaultKey]: Math.max(0, prev.shares[selectedVaultKey] - val) }
+            [txToken]: prev[txToken] + amount,
+            shares: { ...prev.shares, [selectedVaultKey]: Math.max(0, prev.shares[selectedVaultKey] - amount) }
           }));
         }
         setTxStatus("success");
         setTxAmount("");
       } catch (err: any) {
         setTxStatus("error");
-        setTxError(err.message || "Simulation failed.");
+        setTxError(err.message || "Simulated transaction failed.");
       }
     } else {
       if (!isConnected || !address) {
         setTxStatus("error");
-        setTxError("Wallet not connected.");
+        setTxError("Web3 account not connected. Please connect wallet.");
         return;
       }
       try {
@@ -562,12 +671,12 @@ export default function App() {
         }
       } catch (err: any) {
         setTxStatus("error");
-        setTxError(err.message || "Write transaction failed.");
+        setTxError(err.message || "Blockchain wallet write request rejected.");
       }
     }
   };
 
-  // Watch real tx receipt
+  // Watch real Web3 receipts
   useEffect(() => {
     if (isTxConfirming) {
       setTxStatus("loading");
@@ -579,79 +688,104 @@ export default function App() {
     }
     if (web3WriteError) {
       setTxStatus("error");
-      setTxError(web3WriteError.message || "Blockchain transaction failed.");
+      setTxError(web3WriteError.message || "EVM transaction failed on-chain.");
     }
   }, [isTxConfirming, isTxConfirmed, web3WriteError]);
 
-  // Create custom strategy
-  const handleCreateBasket = async () => {
-    if (!newBasketName) return;
-    setCreateBasketStatus("loading");
-    setCreateBasketStep(1);
+  // Synthesize and Compile strategy
+  const handleSynthesizeStrategy = async () => {
+    if (!synthName) return;
+    setSynthStatus("compiling");
+    setSynthLogs([]);
+    setSynthError("");
+
+    const pushLog = (msg: string, delay: number) => {
+      return new Promise<void>((res) => {
+        setTimeout(() => {
+          setSynthLogs((prev) => [...prev, msg]);
+          res();
+        }, delay);
+      });
+    };
 
     try {
-      await new Promise((res) => setTimeout(res, 1200));
-      setCreateBasketStep(2);
-      await new Promise((res) => setTimeout(res, 1500));
-      setCreateBasketStep(3);
-      await new Promise((res) => setTimeout(res, 1000));
+      await pushLog("> [INFO] Initializing Yul Bytecode compiler...", 600);
+      await pushLog("> [INFO] Verifying token liquidity pools on Merchant Moe...", 700);
+      await pushLog(`> [INFO] Resolving pair swaps mapping for inputs USDT -> ${synthTokenA}/${synthTokenB}...`, 800);
+      await pushLog(`> [WARN] Slip check warning: target weight distribution ${synthWeightA}% / ${100 - synthWeightA}%`, 600);
+      await pushLog("> [INFO] Optimizing contract layouts for minimal EVM execution gas...", 800);
+      
+      setSynthStatus("broadcasting");
+      await pushLog("> [INFO] Strategy bytecode compiled successfully: 4,120 bytes.", 500);
+      await pushLog("> [INFO] Broadcasting custom proxy contract to local node...", 800);
+      await pushLog("> [INFO] Mining transaction index. Submitting gas limits...", 900);
+      
+      const newKey = synthName.toLowerCase().replace(/\s+/g, "");
+      const newVaultAddress = "0x" + Math.random().toString(16).substring(2, 42);
+      
+      await pushLog(`> [SUCCESS] Vault deployed at ${newKey}.proxy.basketflow.mnt (${newVaultAddress.slice(0, 10)}...)`, 400);
 
-      const newKey = newBasketName.toLowerCase().replace(/\s+/g, "");
       const newVault = {
         id: Object.keys(vaultsList).length + 1,
-        name: newBasketName,
-        symbol: `bf${newBasketName.substring(0, 4).toUpperCase()}`,
-        address: "0x" + Math.random().toString(16).substring(2, 42),
-        description: newBasketDesc || "Custom strategy designed by you.",
-        targetApy: `${newBasketApy}%`,
-        risk: newBasketRisk,
+        name: synthName,
+        symbol: `bf${synthName.substring(0, 4).toUpperCase()}`,
+        address: newVaultAddress,
+        description: synthDesc || "Custom structured strategy compiled by designer.",
+        targetApy: `${synthApy}%`,
+        risk: synthRisk,
         allocations: [
-          { token: TOKENS[newBasketTokenA], weight: newBasketWeightA },
-          { token: TOKENS[newBasketTokenB], weight: 100 - newBasketWeightA },
+          { token: TOKENS[synthTokenA], weight: synthWeightA },
+          { token: TOKENS[synthTokenB], weight: 100 - synthWeightA },
         ]
       };
 
       setVaultsList((prev) => ({ ...prev, [newKey]: newVault }));
-      setLiveApys((prev) => ({ ...prev, [newKey]: parseFloat(newBasketApy) }));
+      setLiveApys((prev) => ({ ...prev, [newKey]: parseFloat(synthApy) }));
       
-      setCreateBasketStatus("success");
+      setSynthStatus("success");
       setTimeout(() => {
-        setCreateBasketModalOpen(false);
-        setCreateBasketStatus("idle");
+        setSynthStatus("idle");
+        setSynthName("");
+        setSynthDesc("");
         setSelectedVaultKey(newKey);
         setCurrentView("detail");
-      }, 1500);
+      }, 1800);
     } catch (err: any) {
-      setCreateBasketStatus("error");
-      setCreateBasketError(err.message || "Failed to deploy strategy.");
+      setSynthStatus("error");
+      setSynthError(err.message || "Compilation failed. Memory overflow in EVM compiler.");
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#02040a]">
+    <div className="flex flex-col min-h-screen bg-[#03060f] relative overflow-hidden">
       
-      {/* LANDING PAGE ROUTING VIEW */}
+      {/* Background radial overlays */}
+      <div className="bg-glow-purple" />
+      <div className="bg-glow-mint" />
+
+      {/* --- 1. LANDING PAGE VIEW --- */}
       {appMode === "landing" ? (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen z-10 relative">
+          
           {/* Header */}
-          <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#02040a]/80 backdrop-blur-md">
+          <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#03060f]/80 backdrop-blur-md">
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🧺</span>
-                <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] bg-clip-text text-transparent">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl animate-float">🧺</span>
+                <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-[#00ff88] to-[#00e5ff] bg-clip-text text-transparent font-display">
                   BasketFlow
                 </span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <button 
                   onClick={() => { setTutorialStep(0); setTutorialOpen(true); }}
-                  className="btn-secondary py-1.5 px-3 text-xs text-amber-400 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10"
+                  className="btn-secondary py-1.5 px-3.5 text-xs text-[#fbbf24] border-amber-500/10 bg-amber-500/5 hover:bg-amber-500/10 font-bold"
                 >
                   💡 1-Min Guide
                 </button>
                 <button 
                   onClick={() => setAppMode("app")}
-                  className="glow-btn-primary py-1.5 px-4 text-xs font-semibold"
+                  className="btn-primary py-1.5 px-4 text-xs font-bold"
                 >
                   Launch App
                 </button>
@@ -659,83 +793,80 @@ export default function App() {
             </div>
           </header>
 
-          {/* Hero */}
-          <main className="flex-grow max-w-7xl w-full mx-auto px-4 py-16 flex flex-col gap-16">
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0a1122]/50 to-[#02040a]/50 border border-white/5 p-8 sm:p-16 text-center flex flex-col items-center gap-6">
-              <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#00ff9d]/5 rounded-full blur-[120px]" />
-              <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#00e5ff]/5 rounded-full blur-[120px]" />
-
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-gradient-to-r from-[#00ff9d]/10 to-[#00e5ff]/10 border border-[#00ff9d]/20 text-[#00ff9d] uppercase tracking-wider">
+          {/* Hero Main Area */}
+          <main className="flex-grow max-w-7xl w-full mx-auto px-4 py-12 flex flex-col gap-12">
+            
+            {/* Banner block */}
+            <div className="relative overflow-hidden rounded-3xl bg-black/40 border border-white/5 p-8 sm:p-14 text-center flex flex-col items-center gap-6">
+              <span className="text-[10px] font-bold px-3.5 py-1 rounded-full bg-gradient-to-r from-[#00ff88]/10 to-[#00e5ff]/10 border border-[#00ff88]/20 text-[#00ff88] uppercase tracking-wider font-mono">
                 ⚡ Mantle Network Yield Aggregator
               </span>
 
-              <h1 className="text-4xl sm:text-6xl font-black tracking-tight max-w-3xl leading-tight text-white">
+              <h1 className="text-3xl sm:text-5xl font-black tracking-tight max-w-2xl leading-tight text-white font-display">
                 DeFi yield portfolios,{" "}
-                <span className="bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-[#00ff88] to-[#00e5ff] bg-clip-text text-transparent">
                   in a single click.
                 </span>
               </h1>
 
-              <p className="text-[#94a3b8] text-base sm:text-lg max-w-2xl leading-relaxed">
-                Deposit USDT, USDC, or MNT into risk-tiered baskets of Merchant Moe LP assets. 
-                Our smart contracts swap, split, and pool your funds instantly on autopilot.
+              <p className="text-slate-400 text-sm sm:text-base max-w-xl leading-relaxed">
+                Deposit digital dollars or gas assets into custom risk-tiered baskets. 
+                Our smart contracts automatically swap, split, and compound your returns on Merchant Moe LPs.
               </p>
 
-              <div className="mt-4 flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+              <div className="mt-2 flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                 <button 
                   onClick={() => setAppMode("app")}
-                  className="glow-btn-primary py-4 px-8 text-sm font-bold flex items-center justify-center gap-2"
+                  className="btn-primary py-3 px-6 text-xs font-bold flex items-center justify-center gap-2"
                 >
                   Launch App Dashboard
-                  <ArrowUpRight size={18} />
+                  <ArrowUpRight size={14} />
                 </button>
                 <button 
                   onClick={() => { setTutorialStep(0); setTutorialOpen(true); }}
-                  className="btn-secondary py-4 px-8 text-sm font-bold text-amber-400 bg-amber-500/5 border-amber-500/10 hover:bg-amber-500/15"
+                  className="btn-secondary py-3 px-6 text-xs font-bold text-[#fbbf24] bg-amber-500/5 border-amber-500/10 hover:bg-amber-500/10"
                 >
                   💡 Simple Onboarding Guide
                 </button>
               </div>
 
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-8 mt-12 pt-8 border-t border-white/5 w-full max-w-2xl">
+              {/* Ticker Stats */}
+              <div className="grid grid-cols-3 gap-4 mt-8 pt-6 border-t border-white/5 w-full max-w-xl">
                 <div>
-                  <div className="text-[10px] text-[#64748b] font-bold uppercase">Total Value Locked</div>
-                  <div className="text-lg sm:text-2xl font-extrabold text-[#f8fafc] mt-1">
+                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Total Value Locked</div>
+                  <div className="text-base sm:text-xl font-extrabold text-white mt-0.5 font-mono">
                     ${liveTVL.toLocaleString()}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[#64748b] font-bold uppercase">Average APY</div>
-                  <div className="text-lg sm:text-2xl font-extrabold text-[#00ff9d] mt-1">17.6%</div>
+                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Average APY</div>
+                  <div className="text-base sm:text-xl font-extrabold text-[#00ff88] mt-0.5 font-mono">18.4%</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-[#64748b] font-bold uppercase">Active Users</div>
-                  <div className="text-lg sm:text-2xl font-extrabold text-[#00e5ff] mt-1">
+                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Active Users</div>
+                  <div className="text-base sm:text-xl font-extrabold text-[#00e5ff] mt-0.5 font-mono">
                     {liveDepositors.toLocaleString()}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Interactive Visualizer Node Graph */}
-            <div>
-              <h2 className="text-2xl font-bold text-center text-[#f8fafc] mb-8">
-                How BasketFlow Routing Works
-              </h2>
+            {/* Signature animated routing node flow */}
+            <div className="flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-center text-white">How Dynamic Yield Routing Works</h2>
               <YieldRoutingVisualizer liveApys={liveApys} vaultsList={vaultsList} />
             </div>
 
-            {/* Baskets Preview */}
-            <div>
-              <div className="flex justify-between items-end mb-8">
+            {/* Preset Baskets Grid */}
+            <div className="flex flex-col gap-6">
+              <div className="flex justify-between items-end">
                 <div>
-                  <h2 className="text-2xl font-bold text-[#f8fafc]">Featured Yield Baskets</h2>
-                  <p className="text-xs text-[#94a3b8] mt-1">Explore some of our preset LP wrapping strategies.</p>
+                  <h2 className="text-xl font-bold text-white">Featured Preset Baskets</h2>
+                  <p className="text-xs text-slate-400 mt-1">Explore preset LP wrap strategies compiled on Mantle.</p>
                 </div>
                 <button 
                   onClick={() => setAppMode("app")}
-                  className="btn-secondary py-2 px-4 text-xs font-bold"
+                  className="btn-secondary py-1.5 px-3.5 text-xs font-bold"
                 >
                   View All Baskets
                 </button>
@@ -753,30 +884,30 @@ export default function App() {
                         setAppMode("app");
                         setCurrentView("detail");
                       }}
-                      className="glass-panel glass-panel-interactive p-6 flex flex-col justify-between relative overflow-hidden group"
+                      className="panel panel-interactive p-5 flex flex-col justify-between group"
                     >
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] opacity-0 group-hover:opacity-100 transition-opacity" />
                       <div>
-                        <div className="flex justify-between items-center mb-4">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            vault.risk === "Minimal" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" :
-                            vault.risk === "Low" ? "bg-sky-500/10 text-sky-400 border border-sky-500/10" :
-                            vault.risk === "Medium" ? "bg-purple-500/10 text-purple-400 border border-purple-500/10" :
-                            "bg-red-500/10 text-red-400 border border-red-500/10"
+                        <div className="flex justify-between items-center mb-3">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                            vault.risk === "Minimal" ? "pill-mint" :
+                            vault.risk === "Low" ? "pill-teal" :
+                            vault.risk === "Medium" ? "pill-indigo" :
+                            "pill-rose"
                           }`}>
                             {vault.risk} Risk
                           </span>
+                          <span className="text-[10px] text-slate-500 font-mono">MANTLE</span>
                         </div>
-                        <h3 className="text-xl font-bold text-[#f8fafc] mb-1">{vault.name}</h3>
-                        <p className="text-xs text-[#94a3b8] mb-6 line-clamp-2">{vault.description}</p>
+                        <h3 className="text-base font-bold text-white mb-1">{vault.name}</h3>
+                        <p className="text-xs text-slate-400 mb-4 line-clamp-2">{vault.description}</p>
                         
-                        <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/5">
-                          <div className="text-[10px] text-[#94a3b8] mb-0.5 uppercase tracking-wider font-semibold">Live APY</div>
-                          <span className="text-3xl font-extrabold text-[#00ff9d]">{apyVal}</span>
+                        <div className="bg-white/3 rounded-xl p-3 mb-4 border border-white/5">
+                          <div className="text-[9px] text-slate-400 mb-0.5 uppercase tracking-wider font-bold">Estimated APY</div>
+                          <span className="text-2xl font-black text-[#00ff88] font-mono">{apyVal}</span>
                         </div>
                       </div>
-                      <button className="glow-btn-primary w-full py-2.5 text-xs font-bold mt-2">
-                        Invest Basket
+                      <button className="btn-primary w-full py-2.5 text-xs font-bold">
+                        Stake Basket
                       </button>
                     </div>
                   );
@@ -786,107 +917,157 @@ export default function App() {
           </main>
           
           {/* Footer */}
-          <footer className="border-t border-white/5 py-8 bg-black/20 mt-auto text-center text-xs text-[#64748b]">
-            © {new Date().getFullYear()} BasketFlow. Compounding LP yield on the Mantle Network.
+          <footer className="border-t border-white/5 py-6 bg-black/30 mt-auto text-center text-xs text-slate-500 font-medium font-mono">
+            © {new Date().getFullYear()} BASKETFLOW. STABLE AUTO-COMPOUNDING ON MANTLE.
           </footer>
         </div>
       ) : (
-        <div className="flex flex-col md:flex-row min-h-screen">
-          {/* dAPP CORE SIDEBAR DASHBOARD VIEW */}
+        
+        // --- 2. DAPP CORE DASHBOARD VIEW ---
+        <div className="flex flex-col md:flex-row min-h-screen z-10 relative">
           
-          {/* Sidebar */}
-          <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/5 bg-black/35 flex flex-col justify-between shrink-0">
-            <div className="p-6">
-              {/* Brand logo */}
+          {/* Sidebar Left Navigation Panel */}
+          <aside className="w-full md:w-60 border-b md:border-b-0 md:border-r border-white/5 bg-black/45 flex flex-col justify-between shrink-0">
+            <div className="p-5">
+              
+              {/* Brand Logo CTA */}
               <div 
                 onClick={() => setAppMode("landing")}
-                className="flex items-center gap-2 cursor-pointer mb-8"
+                className="flex items-center gap-2 cursor-pointer mb-6"
               >
                 <span className="text-2xl">🧺</span>
-                <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] bg-clip-text text-transparent">
-                  BasketFlow
-                </span>
+                <span className="sidebar-logo text-lg">BasketFlow</span>
               </div>
 
-              {/* Sidebar Navigation */}
-              <nav className="flex flex-col gap-1">
+              {/* Nav Menu */}
+              <nav className="flex flex-col gap-1.5">
                 <button
                   onClick={() => setCurrentView("baskets")}
-                  className={`flex items-center gap-3 w-full py-3 px-4 rounded-xl text-xs font-bold transition-all text-left ${currentView === "baskets" || currentView === "detail" ? "bg-[#00ff9d]/10 border border-[#00ff9d]/30 text-[#00ff9d]" : "text-[#94a3b8] hover:text-white border border-transparent"}`}
+                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    currentView === "baskets" || currentView === "detail"
+                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
+                      : "text-slate-400 hover:text-white border border-transparent"
+                  }`}
                 >
-                  <TrendingUp size={16} />
+                  <Compass size={15} />
                   <span>Invest Baskets</span>
                 </button>
                 <button
                   onClick={() => setCurrentView("dashboard")}
-                  className={`flex items-center gap-3 w-full py-3 px-4 rounded-xl text-xs font-bold transition-all text-left ${currentView === "dashboard" ? "bg-[#00ff9d]/10 border border-[#00ff9d]/30 text-[#00ff9d]" : "text-[#94a3b8] hover:text-white border border-transparent"}`}
+                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    currentView === "dashboard" 
+                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
+                      : "text-slate-400 hover:text-white border border-transparent"
+                  }`}
                 >
-                  <DollarSign size={16} />
+                  <Layers size={15} />
                   <span>My Portfolio</span>
                 </button>
                 <button
-                  onClick={() => setCurrentView("leaderboard")}
-                  className={`flex items-center gap-3 w-full py-3 px-4 rounded-xl text-xs font-bold transition-all text-left ${currentView === "leaderboard" ? "bg-[#00ff9d]/10 border border-[#00ff9d]/30 text-[#00ff9d]" : "text-[#94a3b8] hover:text-white border border-transparent"}`}
+                  onClick={() => setCurrentView("synthesizer")}
+                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    currentView === "synthesizer" 
+                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
+                      : "text-slate-400 hover:text-white border border-transparent"
+                  }`}
                 >
-                  <Award size={16} />
+                  <Plus size={15} />
+                  <span>Synthesize Strategy</span>
+                </button>
+                <button
+                  onClick={() => setCurrentView("leaderboard")}
+                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
+                    currentView === "leaderboard" 
+                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
+                      : "text-slate-400 hover:text-white border border-transparent"
+                  }`}
+                >
+                  <Award size={15} />
                   <span>Leaderboard</span>
                 </button>
                 <button
                   onClick={() => { setTutorialStep(0); setTutorialOpen(true); }}
-                  className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-xs font-bold text-amber-400 hover:text-amber-300 border border-transparent text-left"
+                  className="flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold text-amber-400 hover:text-amber-300 border border-transparent text-left"
                 >
-                  <BookOpen size={16} />
+                  <HelpCircle size={15} />
                   <span>Beginner Guide</span>
                 </button>
               </nav>
+
+              {/* Technical specs hud element */}
+              <div className="mt-8 p-3 bg-black/40 border border-white/5 rounded-xl flex flex-col gap-1.5 font-mono text-[9px] text-slate-500">
+                <div className="flex justify-between">
+                  <span>CHAIN:</span>
+                  <span className="text-[#00e5ff] font-bold">Mantle Local</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RPC PORT:</span>
+                  <span className="text-[#00ff88] font-bold">8545</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>BLOCKS:</span>
+                  <span className="text-white font-bold flex items-center gap-1">
+                    <span className="pulse-dot" style={{ width: 4, height: 4 }} />
+                    #10432
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GAS PRICE:</span>
+                  <span className="text-[#fbbf24] font-bold">12 Gwei</span>
+                </div>
+              </div>
             </div>
 
             {/* Sidebar Bottom Controls */}
-            <div className="p-6 border-t border-white/5 flex flex-col gap-4">
-              {/* Demo switch */}
-              <div className="flex items-center justify-between bg-white/5 border border-white/5 rounded-xl px-3 py-2 text-xs">
-                <span className="text-[#94a3b8] font-bold">Simulated Mode</span>
+            <div className="p-5 border-t border-white/5 flex flex-col gap-3">
+              {/* Sandbox toggle */}
+              <div className="flex items-center justify-between bg-white/2 border border-white/5 rounded-xl px-3 py-2 text-xs">
+                <span className="text-slate-400 font-bold font-mono text-[10px]">SANDBOX</span>
                 <button 
                   onClick={() => setDemoMode(!demoMode)} 
-                  className={`relative inline-flex h-4.5 w-8 items-center rounded-full transition-colors ${demoMode ? "bg-[#00ff9d]" : "bg-white/10"}`}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors outline-none cursor-pointer ${
+                    demoMode ? "bg-[#00ff88]" : "bg-white/10"
+                  }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-slate-900 transition-transform ${demoMode ? "translate-x-4.5" : "translate-x-0.5"}`} />
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-slate-900 transition-transform ${
+                    demoMode ? "translate-x-4.5" : "translate-x-1"
+                  }`} />
                 </button>
               </div>
 
-              {/* Wallet info */}
+              {/* Wallet info hooks */}
               {!demoMode ? (
                 <ConnectButton label="Connect Wallet" />
               ) : (
-                <div className="flex items-center gap-2 bg-gradient-to-r from-[#00ff9d]/5 to-[#00e5ff]/5 border border-[#00ff9d]/20 rounded-xl px-3.5 py-2.5 text-xs text-[#00ff9d] font-bold">
-                  <ShieldCheck size={16} />
-                  Demo Mode Connected
+                <div className="flex items-center gap-2 bg-[#00ff88]/5 border border-[#00ff88]/15 rounded-xl px-3 py-2.5 text-xs text-[#00ff88] font-bold font-mono">
+                  <ShieldCheck size={15} />
+                  SANDBOX USER
                 </div>
               )}
             </div>
           </aside>
 
-          {/* Main Area */}
-          <main className="flex-grow flex flex-col md:flex-row pb-24 md:pb-0 overflow-y-auto">
+          {/* Main Content Viewport */}
+          <main className="flex-grow flex flex-col lg:flex-row pb-20 md:pb-0 overflow-y-auto">
             
-            {/* View Viewport */}
-            <div className="flex-grow p-6 lg:p-8 max-w-4xl w-full mx-auto flex flex-col gap-6">
+            {/* Core Views Column */}
+            <div className="flex-grow p-5 lg:p-8 max-w-4xl w-full mx-auto flex flex-col gap-6">
               
-              {/* Banner for Demo mode active */}
+              {/* Sandbox info banner */}
               {demoMode && (
-                <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#00ff9d]/5 to-[#00e5ff]/5 border border-[#00ff9d]/10 flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2 text-[#00ff9d] font-semibold">
+                <div className="p-3 rounded-xl bg-gradient-to-r from-[#00ff88]/5 to-[#00e5ff]/5 border border-[#00ff88]/10 flex justify-between items-center text-xs">
+                  <div className="flex items-center gap-2 text-[#00ff88] font-bold font-mono text-[10px]">
                     <Activity size={14} className="animate-pulse" />
-                    <span>Demo Mode Enabled: Yield Compounds Instantly</span>
+                    <span>SANDBOX ACCRUAL ACTIVE (300X SPEED)</span>
                   </div>
                   <button 
                     onClick={() => setDemoBalances({
-                      USDT: 2000,
-                      USDC: 1200,
-                      MNT: 600,
+                      USDT: 5000,
+                      USDC: 3500,
+                      MNT: 1200,
                       shares: { conservative: 0, mantleMax: 0, stableShuffle: 0 }
                     })}
-                    className="text-[10px] text-[#94a3b8] hover:text-white underline cursor-pointer"
+                    className="text-[9px] text-slate-400 hover:text-white underline font-bold"
                   >
                     Reset Balances
                   </button>
@@ -895,18 +1076,18 @@ export default function App() {
 
               {/* VIEW 1: BASKETS GRID */}
               {currentView === "baskets" && (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-5">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h2 className="text-2xl font-black text-white">Investment Baskets</h2>
-                      <p className="text-xs text-[#94a3b8]">Select a vault below to deposit funds and compound yields.</p>
+                      <h2 className="text-xl font-black text-white">Investment Baskets</h2>
+                      <p className="text-xs text-slate-400">Select a preset strategy below to stake assets and compound yield.</p>
                     </div>
                     <button 
-                      onClick={() => setCreateBasketModalOpen(true)}
-                      className="glow-btn-primary py-2 px-4 text-xs font-bold"
+                      onClick={() => setCurrentView("synthesizer")}
+                      className="btn-primary py-2 px-3.5 text-xs font-bold"
                     >
                       <Plus size={14} />
-                      Custom strategy
+                      Create Strategy
                     </button>
                   </div>
 
@@ -915,8 +1096,8 @@ export default function App() {
                       const vault = vaultsList[key];
                       const apyVal = liveApys[key] !== undefined ? `${liveApys[key]}%` : vault.targetApy;
                       const direction = apyDirection[key];
-                      const borderGlowClass = direction === "up" ? "card-glow-up" : direction === "down" ? "card-glow-down" : "";
-                      const apyColorClass = direction === "up" ? "text-emerald-400" : direction === "down" ? "text-red-400" : "text-[#00ff9d]";
+                      const glowClass = direction === "up" ? "flash-up" : direction === "down" ? "flash-down" : "";
+                      const apyColor = direction === "up" ? "text-emerald-400" : direction === "down" ? "text-rose-400" : "text-[#00ff88]";
 
                       return (
                         <div 
@@ -925,52 +1106,55 @@ export default function App() {
                             setSelectedVaultKey(key);
                             setCurrentView("detail");
                           }}
-                          className={`glass-panel glass-panel-interactive p-5 flex flex-col justify-between relative overflow-hidden group transition-all duration-500 ${borderGlowClass}`}
+                          className={`panel panel-interactive p-5 flex flex-col justify-between group transition-all duration-300 ${glowClass}`}
                         >
-                          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#00ff9d] to-[#00e5ff] opacity-0 group-hover:opacity-100 transition-opacity" />
                           <div>
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-center mb-3">
                               <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                vault.risk === "Minimal" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" :
-                                vault.risk === "Low" ? "bg-sky-500/10 text-sky-400 border border-sky-500/10" :
-                                vault.risk === "Medium" ? "bg-purple-500/10 text-purple-400 border border-purple-500/10" :
-                                "bg-red-500/10 text-red-400 border border-red-500/10"
+                                vault.risk === "Minimal" ? "pill-mint" :
+                                vault.risk === "Low" ? "pill-teal" :
+                                vault.risk === "Medium" ? "pill-indigo" :
+                                "pill-rose"
                               }`}>
                                 {vault.risk} Risk
                               </span>
                               <span className="pulse-dot" />
                             </div>
 
-                            <h3 className="text-lg font-bold text-white mb-1">{vault.name}</h3>
-                            <p className="text-xs text-[#94a3b8] mb-5 line-clamp-2">{vault.description}</p>
+                            <h3 className="text-base font-bold text-white mb-1">{vault.name}</h3>
+                            <p className="text-xs text-slate-400 mb-4 line-clamp-2">{vault.description}</p>
 
-                            {/* APY Box */}
-                            <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex justify-between items-center mb-4">
-                              <span className="text-[10px] text-[#94a3b8] font-bold uppercase">Target APY</span>
-                              <span className={`text-xl font-extrabold flex items-center gap-1 ${apyColorClass}`}>
+                            {/* APY metrics box */}
+                            <div className="bg-white/2 rounded-xl p-3 border border-white/5 flex justify-between items-center mb-4">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Target APY</span>
+                              <span className={`text-lg font-black font-mono flex items-center gap-1 ${apyColor}`}>
                                 {apyVal}
                                 {direction === "up" && "▲"}
                                 {direction === "down" && "▼"}
                               </span>
                             </div>
 
-                            {/* Allocations visualizer */}
+                            {/* splits ratios slider preview */}
                             <div className="flex flex-col gap-1.5 mb-2">
-                              <span className="text-[9px] text-[#94a3b8] font-bold uppercase tracking-wider">Asset split</span>
-                              <div className="flex h-2 w-full rounded-full overflow-hidden bg-white/5 border border-white/5">
-                                {vault.allocations.map((alloc: any, idx: number) => (
-                                  <div 
-                                    key={idx} 
-                                    style={{ width: `${alloc.weight}%` }} 
-                                    className={`h-full ${idx === 0 ? "bg-[#00ff9d]" : idx === 1 ? "bg-[#00e5ff]" : "bg-purple-500"}`}
-                                  />
-                                ))}
+                              <span className="text-[9px] text-slate-505 font-bold uppercase tracking-wider">Asset splits</span>
+                              <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-white/5">
+                                {vault.allocations.map((alloc: any, idx: number) => {
+                                  const splitColors = ["bg-[#00ff88]", "bg-[#00e5ff]", "bg-[#6366f1]", "bg-[#fbbf24]"];
+                                  const colorClass = splitColors[idx % splitColors.length];
+                                  return (
+                                    <div 
+                                      key={idx} 
+                                      style={{ width: `${alloc.weight}%` }} 
+                                      className={`h-full ${colorClass}`}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
                           
                           <button className="btn-secondary w-full py-2 text-xs font-bold mt-4">
-                            Select strategy
+                            Select Strategy
                           </button>
                         </div>
                       );
@@ -981,89 +1165,91 @@ export default function App() {
 
               {/* VIEW 2: VAULT DETAIL */}
               {currentView === "detail" && (
-                <div className="flex flex-col gap-6">
-                  {/* Header info */}
+                <div className="flex flex-col gap-5">
                   <div className="flex items-center justify-between">
                     <button 
                       onClick={() => setCurrentView("baskets")}
-                      className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
+                      className="btn-secondary py-1.5 px-3.5 text-xs flex items-center gap-1.5 font-bold"
                     >
                       <ArrowLeft size={12} />
                       Back to Baskets
                     </button>
-                    <span className="text-xs text-[#94a3b8] font-bold bg-white/5 border border-white/5 px-2.5 py-1 rounded-md uppercase">Mantle Vault</span>
+                    <span className="text-[9px] text-slate-500 font-bold bg-white/3 border border-white/5 px-2.5 py-1 rounded-md uppercase tracking-wider font-mono">Mantle Vault</span>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Vault Stats */}
-                    <div className="lg:col-span-2 flex flex-col gap-6">
-                      <div className="glass-panel p-6">
+                    {/* Left Detail Charts */}
+                    <div className="lg:col-span-2 flex flex-col gap-5">
+                      <div className="panel p-5">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h2 className="text-2xl font-bold text-[#f8fafc]">{activeVault.name}</h2>
-                            <p className="text-xs text-[#94a3b8] mt-1">{activeVault.description}</p>
+                            <h2 className="text-xl font-bold text-white">{activeVault.name}</h2>
+                            <p className="text-xs text-slate-400 mt-1">{activeVault.description}</p>
                           </div>
                           <div className="text-right">
-                            <span className="text-[9px] text-[#94a3b8] uppercase font-bold">APY Rate</span>
-                            <div className="text-2xl font-black text-[#00ff9d]">{liveApys[selectedVaultKey] || activeVault.targetApy}%</div>
+                            <span className="text-[9px] text-slate-500 uppercase font-bold font-mono">LIVE APY</span>
+                            <div className="text-xl font-black text-[#00ff88] font-mono">
+                              {liveApys[selectedVaultKey] || activeVault.targetApy}%
+                            </div>
                           </div>
                         </div>
 
                         {/* Chart */}
-                        <div className="mt-6">
-                          <h4 className="text-xs font-bold text-[#94a3b8] uppercase tracking-wider mb-3">Historical yield (30D)</h4>
+                        <div className="mt-4">
+                          <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Historical Yield Progress (30D)</h4>
                           <PerformanceChart vaultKey={selectedVaultKey} />
                         </div>
                       </div>
 
-                      {/* Allocations breakdown */}
-                      <div className="glass-panel p-6 flex flex-col sm:flex-row items-center gap-6">
+                      {/* Splits compositions panel */}
+                      <div className="panel p-5 flex flex-col sm:flex-row items-center gap-6">
                         <CompositionChart allocations={activeVault.allocations} />
-                        <div className="flex-grow flex flex-col gap-3 w-full">
-                          <h4 className="text-xs font-bold text-[#94a3b8] uppercase tracking-wider">LP Component Splits</h4>
-                          {activeVault.allocations.map((alloc: any, idx: number) => (
-                            <div key={idx} className="p-3 bg-white/2 border border-white/5 rounded-xl flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`w-3 h-3 rounded-full ${idx === 0 ? "bg-[#00ff9d]" : idx === 1 ? "bg-[#00e5ff]" : "bg-purple-500"}`} />
-                                <div>
-                                  <div className="font-bold text-xs text-[#f8fafc]">{alloc.token.symbol}</div>
-                                  <div className="text-[9px] text-[#94a3b8]">{alloc.token.name}</div>
+                        <div className="flex-grow flex flex-col gap-2 w-full">
+                          <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">LP Allocation Weights</h4>
+                          {activeVault.allocations.map((alloc: any, idx: number) => {
+                            const splitColors = ["bg-[#00ff88]", "bg-[#00e5ff]", "bg-[#6366f1]", "bg-[#fbbf24]"];
+                            const colorClass = splitColors[idx % splitColors.length];
+                            return (
+                              <div key={idx} className="p-2.5 bg-white/2 border border-white/5 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`} />
+                                  <div>
+                                    <div className="font-bold text-xs text-white">{alloc.token.symbol}</div>
+                                    <div className="text-[8px] text-slate-500 font-bold uppercase">{alloc.token.name}</div>
+                                  </div>
                                 </div>
+                                <span className="text-xs font-mono font-bold text-white">{alloc.weight}%</span>
                               </div>
-                              <span className="text-sm font-bold text-white">{alloc.weight}%</span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
 
-                    {/* Deposit form */}
-                    <div className="glass-panel p-6 border border-[#00ff9d]/15 flex flex-col justify-between gap-6">
+                    {/* Right Staking Form */}
+                    <div className="panel p-5 border border-[#00ff88]/15 flex flex-col justify-between gap-5">
                       <div>
-                        <h4 className="text-sm font-bold text-[#f8fafc] mb-1">Staking Ledger</h4>
-                        <p className="text-[10px] text-[#94a3b8]">Input assets are automatically routed to Moe LP pools.</p>
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Staking Ledger</h4>
+                        <p className="text-[9.5px] text-slate-400">Funds are routed and deposited directly on Merchant Moe LPs.</p>
 
                         <div className="flex flex-col gap-4 mt-6">
-                          {/* Amount Input */}
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[10px] text-[#94a3b8] font-bold">
+                          <div className="input-group">
+                            <div className="flex justify-between text-[9px] text-slate-400 font-bold font-mono">
                               <span>AMOUNT</span>
-                              <span>
-                                BAL: {demoMode ? `${demoBalances[txToken]} ${txToken}` : "Connected"}
-                              </span>
+                              <span>BAL: {demoMode ? `${demoBalances[txToken]} ${txToken}` : "Connected"}</span>
                             </div>
-                            <div className="flex items-center bg-black/40 border border-white/5 rounded-xl px-3 py-1.5">
+                            <div className="input-container">
                               <input 
                                 type="number" 
                                 placeholder="0.00" 
                                 value={txAmount}
                                 onChange={(e) => setTxAmount(e.target.value)}
-                                className="bg-transparent border-none w-full text-base font-bold text-white outline-none"
+                                className="input-field"
                               />
                               <select 
                                 value={txToken}
                                 onChange={(e) => setTxToken(e.target.value as any)}
-                                className="bg-[#0f172a] border border-white/5 text-white text-xs font-bold rounded-lg px-2 py-1 outline-none"
+                                className="token-select"
                               >
                                 <option value="USDT">USDT</option>
                                 <option value="USDC">USDC</option>
@@ -1072,21 +1258,21 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Splits preview */}
+                          {/* Splits dynamic preview */}
                           {txAmount && parseFloat(txAmount) > 0 && (
-                            <div className="p-3 bg-white/2 border border-white/5 rounded-xl flex flex-col gap-1.5 text-[10px] text-[#94a3b8]">
+                            <div className="p-3 bg-white/2 border border-white/5 rounded-xl flex flex-col gap-1 text-[10px] text-slate-400 font-mono">
                               <div className="flex justify-between text-white font-bold">
-                                <span>Estimating swaps</span>
-                                <span>~{(parseFloat(txAmount) / 2).toFixed(2)} / {(parseFloat(txAmount) / 2).toFixed(2)}</span>
+                                <span>LP swap splits</span>
+                                <span>~{(parseFloat(txAmount) * (activeVault.allocations[0]?.weight || 50) / 100).toFixed(2)} / {(parseFloat(txAmount) * (activeVault.allocations[1]?.weight || 50) / 100).toFixed(2)}</span>
                               </div>
-                              <span>Routed to {activeVault.allocations.map((a: any) => a.token.symbol).join(" / ")} Moe pair</span>
+                              <span>Route: {activeVault.allocations.map((a: any) => a.token.symbol).join(" / ")} Pair</span>
                             </div>
                           )}
 
                           <div className="flex flex-col gap-2 mt-2">
                             <button 
                               onClick={() => handleExecuteTx("deposit")}
-                              className="glow-btn-primary py-3 text-xs w-full flex items-center justify-center gap-1.5"
+                              className="btn-primary py-3 text-xs w-full flex items-center justify-center gap-1.5"
                             >
                               <span>Deposit Stake</span>
                               <ArrowUpRight size={14} />
@@ -1102,15 +1288,15 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Position readout */}
+                      {/* Live user position details */}
                       {demoBalances.shares[selectedVaultKey] > 0 && (
-                        <div className="border-t border-white/5 pt-4 flex flex-col gap-1.5">
-                          <div className="flex justify-between text-[10px] text-[#94a3b8]">
-                            <span>Active Balance</span>
-                            <span className="text-white font-bold">{demoBalances.shares[selectedVaultKey]} shares</span>
+                        <div className="border-t border-white/5 pt-4 flex flex-col gap-1 text-[10.5px]">
+                          <div className="flex justify-between text-slate-400">
+                            <span>Active Balance:</span>
+                            <span className="text-white font-bold font-mono">{demoBalances.shares[selectedVaultKey]} shares</span>
                           </div>
-                          <div className="flex justify-between text-[10px] text-[#94a3b8]">
-                            <span>Yield Earned</span>
+                          <div className="flex justify-between text-slate-400">
+                            <span>Accrued Yield:</span>
                             <InterestTicker 
                               shares={{ [selectedVaultKey]: demoBalances.shares[selectedVaultKey] }} 
                               liveApys={liveApys} 
@@ -1125,42 +1311,42 @@ export default function App() {
                 </div>
               )}
 
-              {/* VIEW 3: USER DASHBOARD */}
+              {/* VIEW 3: USER PORTFOLIO DASHBOARD */}
               {currentView === "dashboard" && (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-5">
                   <div>
-                    <h2 className="text-2xl font-black text-white">Portfolio Dashboard</h2>
-                    <p className="text-xs text-[#94a3b8]">Monitor your compound shares and real-time interest accrued.</p>
+                    <h2 className="text-xl font-black text-white">Portfolio Dashboard</h2>
+                    <p className="text-xs text-slate-400">Monitor your active yield-bearing allocations and overall accrued interest.</p>
                   </div>
 
-                  {/* Portfolio Card */}
-                  <div className="glass-panel p-6 sm:p-8 bg-gradient-to-r from-[#0a1122]/50 to-[#02040a]/50 border border-[#00ff9d]/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                  {/* Portfolio values banner */}
+                  <div className="panel p-6 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                     <div>
-                      <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Total Position Balance</span>
-                      <div className="text-4xl font-extrabold text-[#f8fafc] mt-1">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Aggregate Position Balance</span>
+                      <div className="text-3xl font-extrabold text-white mt-1 font-mono">
                         ${(demoBalances.shares.conservative * 1.0 + demoBalances.shares.mantleMax * 1.25 + demoBalances.shares.stableShuffle * 0.95).toLocaleString(undefined, {minimumFractionDigits: 2})}
                       </div>
-                      <span className="text-[10px] text-[#00ff9d] font-semibold flex items-center gap-1.5 mt-2">
+                      <span className="text-[10px] text-[#00ff88] font-bold flex items-center gap-1.5 mt-2">
                         <span className="pulse-dot" />
-                        Accruing yield continuously
+                        Yield updates in real-time
                       </span>
                     </div>
 
-                    <div className="bg-black/40 border border-white/5 rounded-2xl p-5 min-w-[200px]">
-                      <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Total Yield Earned</span>
-                      <div className="text-2xl font-bold mt-1">
+                    <div className="bg-black/40 border border-white/5 rounded-2xl p-4 min-w-[200px]">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider font-mono">Total Yield Earned</span>
+                      <div className="text-xl font-bold mt-1">
                         {demoMode ? (
                           <InterestTicker shares={demoBalances.shares} liveApys={liveApys} vaultsList={vaultsList} />
                         ) : (
-                          <span className="text-[#94a3b8]">$0.000000</span>
+                          <span className="text-slate-505 font-mono">$0.000000</span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Active positions list */}
-                  <div className="glass-panel p-6">
-                    <h3 className="text-lg font-bold text-white mb-6">Staked Allocations</h3>
+                  {/* List of positions */}
+                  <div className="panel p-5">
+                    <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider">Active Strategy Shares</h3>
                     
                     <div className="flex flex-col gap-3">
                       {Object.keys(vaultsList).map((key) => {
@@ -1171,24 +1357,24 @@ export default function App() {
                         return (
                           <div key={key} className="p-4 bg-white/2 border border-white/5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div className="flex items-center gap-3">
-                              <span className="text-2xl">🧺</span>
+                              <span className="text-2xl animate-float">🧺</span>
                               <div>
-                                <h4 className="font-bold text-sm text-[#f8fafc]">{vault.name}</h4>
-                                <span className="text-[10px] text-[#94a3b8]">{vault.symbol} shares</span>
+                                <h4 className="font-bold text-xs text-white">{vault.name}</h4>
+                                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">{vault.symbol} Shares</span>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-6 sm:flex sm:gap-12">
+                            <div className="grid grid-cols-3 gap-6 sm:flex sm:gap-10 font-mono">
                               <div>
-                                <span className="text-[9px] text-[#94a3b8] uppercase font-bold">STAKED</span>
-                                <div className="text-xs font-bold text-white">{shareBal} shares</div>
+                                <span className="text-[8px] text-slate-500 uppercase font-bold">STAKED</span>
+                                <div className="text-xs font-bold text-white">{shareBal}</div>
                               </div>
                               <div>
-                                <span className="text-[9px] text-[#94a3b8] uppercase font-bold">EST VALUE</span>
-                                <div className="text-xs font-bold text-[#00ff9d]">${(shareBal * 1.05).toFixed(2)}</div>
+                                <span className="text-[8px] text-slate-500 uppercase font-bold">EST VAL</span>
+                                <div className="text-xs font-bold text-[#00ff88]">${(shareBal * 1.05).toFixed(2)}</div>
                               </div>
                               <div>
-                                <span className="text-[9px] text-[#94a3b8] uppercase font-bold">APY</span>
+                                <span className="text-[8px] text-slate-500 uppercase font-bold">APY RATE</span>
                                 <div className="text-xs font-bold text-white">{liveApys[key]}%</div>
                               </div>
                             </div>
@@ -1207,8 +1393,8 @@ export default function App() {
                       })}
                       
                       {Object.values(demoBalances.shares).every(v => v === 0) && (
-                        <div className="p-8 text-center text-xs text-[#64748b] border border-dashed border-white/5 rounded-2xl">
-                          No active yield positions. Select a basket strategy to begin staking.
+                        <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-white/5 rounded-2xl font-medium">
+                          No active strategy shares. Select an investment basket to stake assets.
                         </div>
                       )}
                     </div>
@@ -1216,48 +1402,246 @@ export default function App() {
                 </div>
               )}
 
-              {/* VIEW 4: GAMIFIED LEADERBOARD */}
-              {currentView === "leaderboard" && (
-                <div className="flex flex-col gap-6">
-                  <div className="text-center mb-4">
-                    <h2 className="text-2xl font-black text-white">Yield Leaderboard</h2>
-                    <p className="text-xs text-[#94a3b8]">Real-time leaderboard tracking the top-yielding accounts on Mantle.</p>
+              {/* VIEW 4: STRATEGY SYNTHESIZER / CREATOR */}
+              {currentView === "synthesizer" && (
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <h2 className="text-xl font-black text-white">Strategy Synthesizer</h2>
+                    <p className="text-xs text-slate-400">Compile and deploy custom structured yields on Mantle network.</p>
                   </div>
 
-                  <div className="glass-panel overflow-hidden">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Control Form */}
+                    <div className="panel p-5 flex flex-col gap-4">
+                      {synthStatus === "idle" ? (
+                        <>
+                          <div className="input-group">
+                            <label className="input-label">Strategy Name</label>
+                            <div className="input-container">
+                              <input 
+                                type="text" 
+                                placeholder="e.g. HyperMNT Compounder" 
+                                value={synthName}
+                                onChange={(e) => setSynthName(e.target.value)}
+                                className="input-field"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="input-group">
+                              <label className="input-label">Token A Component</label>
+                              <select 
+                                value={synthTokenA}
+                                onChange={(e) => setSynthTokenA(e.target.value as any)}
+                                className="token-select w-full"
+                              >
+                                <option value="USDT">USDT</option>
+                                <option value="USDC">USDC</option>
+                                <option value="mETH">mETH</option>
+                                <option value="MNT">MNT</option>
+                              </select>
+                            </div>
+                            <div className="input-group">
+                              <label className="input-label">Token B Component</label>
+                              <select 
+                                value={synthTokenB}
+                                onChange={(e) => setSynthTokenB(e.target.value as any)}
+                                className="token-select w-full"
+                              >
+                                <option value="USDT">USDT</option>
+                                <option value="USDC">USDC</option>
+                                <option value="mETH">mETH</option>
+                                <option value="MNT">MNT</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="input-group">
+                            <div className="flex justify-between text-[9px] font-bold font-mono text-slate-400 uppercase">
+                              <span>Asset split allocation</span>
+                              <span>{synthWeightA}% {synthTokenA} / {100 - synthWeightA}% {synthTokenB}</span>
+                            </div>
+                            <input 
+                              type="range" 
+                              min="10" 
+                              max="90" 
+                              step="5" 
+                              value={synthWeightA}
+                              onChange={(e) => setSynthWeightA(parseInt(e.target.value))}
+                              className="w-full mt-1"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="input-group">
+                              <label className="input-label">Target APY (%)</label>
+                              <div className="input-container">
+                                <input 
+                                  type="number" 
+                                  placeholder="15.5" 
+                                  value={synthApy}
+                                  onChange={(e) => setSynthApy(e.target.value)}
+                                  className="input-field"
+                                />
+                              </div>
+                            </div>
+                            <div className="input-group">
+                              <label className="input-label">Risk Profile</label>
+                              <select 
+                                value={synthRisk}
+                                onChange={(e) => setSynthRisk(e.target.value)}
+                                className="token-select w-full"
+                              >
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="input-group">
+                            <label className="input-label">Description</label>
+                            <textarea 
+                              rows={2}
+                              placeholder="Brief strategy goals..." 
+                              value={synthDesc}
+                              onChange={(e) => setSynthDesc(e.target.value)}
+                              className="token-select w-full resize-none bg-black/40 border border-white/5 rounded-xl text-xs"
+                              style={{ padding: '8px 12px' }}
+                            />
+                          </div>
+
+                          <button 
+                            onClick={handleSynthesizeStrategy}
+                            disabled={!synthName}
+                            className="btn-primary w-full py-3 mt-2 text-xs font-bold"
+                          >
+                            Compile & Synthesize
+                          </button>
+                        </>
+                      ) : (
+                        
+                        /* Compiler Output terminal log screen */
+                        <div className="flex flex-col gap-4 py-2">
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <RefreshCw size={12} className="animate-spin text-[#00ff88]" />
+                            <span>Bytecode compilation terminal</span>
+                          </h4>
+                          <div className="compiler-log">
+                            {synthLogs.map((log, idx) => {
+                              const isSuccess = log.includes("SUCCESS");
+                              const isWarn = log.includes("WARN");
+                              const lineClass = isSuccess ? "compiler-line-success" : isWarn ? "compiler-line-warn" : "compiler-line-info";
+                              return (
+                                <div key={idx} className={lineClass}>
+                                  {log}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {synthStatus === "success" && (
+                            <div className="text-center p-3.5 bg-emerald-500/5 border border-[#00ff88]/20 rounded-xl text-xs text-[#00ff88] font-bold font-mono">
+                              ✓ strategy Deployed successfully. redirecting...
+                            </div>
+                          )}
+                          {synthStatus === "error" && (
+                            <div className="text-center p-3.5 bg-rose-500/5 border border-rose-500/20 rounded-xl text-xs text-rose-500 font-bold font-mono">
+                              ✕ Compilation Error: {synthError}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Preview Panel visualizer */}
+                    <div className="panel p-5 bg-black/30 flex flex-col justify-between gap-5 text-center">
+                      <div>
+                        <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Live strategy preview</h4>
+                        
+                        <div className="my-6 flex justify-center items-center gap-6">
+                          <div className="flex flex-col items-center">
+                            <div className="w-12 h-12 rounded-lg bg-black/60 border border-[#00e5ff] flex items-center justify-center font-bold text-xs text-white">
+                              {synthTokenA}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-bold mt-1.5 font-mono">{synthWeightA}%</span>
+                          </div>
+                          <span className="text-slate-500 text-lg">✖</span>
+                          <div className="flex flex-col items-center">
+                            <div className="w-12 h-12 rounded-lg bg-black/60 border border-[#6366f1] flex items-center justify-center font-bold text-xs text-white">
+                              {synthTokenB}
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-bold mt-1.5 font-mono">{100 - synthWeightA}%</span>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-white/2 border border-white/5 rounded-xl flex flex-col gap-2 text-left text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Vault Symbol:</span>
+                            <span className="text-white font-bold font-mono">bf{synthName ? synthName.substring(0, 4).toUpperCase() : "STRT"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Risk Profile:</span>
+                            <span className="text-[#fbbf24] font-bold">{synthRisk} Risk</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Target APY:</span>
+                            <span className="text-[#00ff88] font-bold font-mono">{synthApy}% APY</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-black/40 border border-white/5 rounded-xl text-[10px] text-slate-500 font-mono">
+                        Vault structures utilize ERC-4626 standard wrappers.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW 5: LEADERBOARD */}
+              {currentView === "leaderboard" && (
+                <div className="flex flex-col gap-5">
+                  <div className="text-center mb-2">
+                    <h2 className="text-xl font-black text-white">Yield Leaderboard</h2>
+                    <p className="text-xs text-slate-400">Real-time stats tracking top compounding addresses on Mantle Network.</p>
+                  </div>
+
+                  <div className="panel overflow-hidden">
                     <table className="w-full text-left border-collapse">
                       <thead>
-                        <tr className="border-b border-white/5 bg-white/2 text-[9px] text-[#94a3b8] font-bold uppercase tracking-wider">
+                        <tr className="border-b border-white/5 bg-white/2 text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">
                           <th className="p-4 text-center w-16">Rank</th>
-                          <th className="p-4">Address</th>
+                          <th className="p-4">Staker Address</th>
                           <th className="p-4 text-center">Baskets</th>
                           <th className="p-4 text-right">Yield Earned</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5 text-xs text-[#f8fafc]">
                         {[
-                          { rank: 1, address: "replytim.mnt", baskets: 3, yield: "$423.82", badge: "Yield King" },
-                          { rank: 2, address: "0x7099...79c8", baskets: 2, yield: demoMode ? <InterestTicker shares={demoBalances.shares} liveApys={liveApys} vaultsList={vaultsList} /> : "$0.00", badge: "You", highlight: true },
+                          { rank: 1, address: "replytim.mnt", baskets: 4, yield: "$423.82", badge: "Yield King" },
+                          { rank: 2, address: "0x7099...79c8", baskets: 3, yield: demoMode ? <InterestTicker shares={demoBalances.shares} liveApys={liveApys} vaultsList={vaultsList} /> : "$0.00", badge: "You", highlight: true },
                           { rank: 3, address: "vitalik.eth", baskets: 2, yield: "$128.52", badge: "Pioneer" },
                           { rank: 4, address: "0x3c44...62b9", baskets: 1, yield: "$84.21", badge: "Regular" },
                           { rank: 5, address: "0x90f7...72ff", baskets: 1, yield: "$32.40", badge: "Regular" },
                         ].map((row, idx) => (
-                          <tr key={idx} className={`${row.highlight ? "bg-[#00ff9d]/5 hover:bg-[#00ff9d]/10" : "hover:bg-white/2"}`}>
-                            <td className="p-4 text-center font-bold text-[#00ff9d]">
+                          <tr key={idx} className={`${row.highlight ? "bg-[#00ff88]/5 hover:bg-[#00ff88]/10" : "hover:bg-white/2"}`}>
+                            <td className="p-4 text-center font-bold text-[#00ff88] font-mono">
                               {row.rank === 1 ? "🥇" : row.rank === 2 ? "🥈" : row.rank === 3 ? "🥉" : row.rank}
                             </td>
                             <td className="p-4 font-bold flex items-center gap-2">
-                              {row.address}
+                              <span className="font-mono">{row.address}</span>
                               {row.badge && (
                                 <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                                  row.badge === "Yield King" ? "bg-amber-500/10 text-amber-400 border border-amber-500/10" :
-                                  row.badge === "You" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10" :
-                                  "bg-sky-500/10 text-sky-400 border border-sky-500/10"
+                                  row.badge === "Yield King" ? "pill-amber" :
+                                  row.badge === "You" ? "pill-mint" :
+                                  "pill-teal"
                                 }`}>{row.badge}</span>
                               )}
                             </td>
-                            <td className="p-4 text-center text-[#94a3b8] font-semibold">{row.baskets} Baskets</td>
-                            <td className="p-4 text-right font-mono font-bold text-[#00ff9d]">{row.yield}</td>
+                            <td className="p-4 text-center text-slate-400 font-semibold">{row.baskets} strategy</td>
+                            <td className="p-4 text-right font-mono font-bold text-[#00ff88]">{row.yield}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1267,30 +1651,36 @@ export default function App() {
               )}
             </div>
 
-            {/* Right Activity Sidebar (Only visible on wide desktop view) */}
-            <div className="hidden lg:flex flex-col w-80 shrink-0 border-l border-white/5 bg-black/10 p-6 gap-6">
+            {/* Right Sidebar Block Explorer (Only visible on wide screens) */}
+            <div className="hidden lg:flex flex-col w-72 shrink-0 border-l border-white/5 bg-black/10 p-5 gap-5">
               
-              {/* Activity feed */}
-              <div className="glass-panel p-4 flex flex-col gap-4">
-                <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider flex items-center gap-1.5">
+              {/* Explorer block */}
+              <div className="panel p-4 flex flex-col gap-4">
+                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
                   <span className="pulse-dot" />
-                  Live Activity Feed
+                  Live Event Explorer
                 </span>
                 <div className="flex flex-col gap-2">
                   {activities.map((act) => (
-                    <div key={act.id} className="p-2.5 rounded-lg bg-white/2 border border-white/5 text-[10px] text-[#94a3b8] flex justify-between items-start gap-1">
-                      <span className="font-semibold text-white leading-normal">{act.text}</span>
-                      <span className="text-[8px] text-[#64748b] shrink-0">{act.time}</span>
+                    <div key={act.id} className="p-2.5 rounded-xl bg-white/2 border border-white/5 text-[9.5px] text-slate-400 flex flex-col gap-1">
+                      <span className="font-medium text-slate-200 leading-normal">{act.text}</span>
+                      <div className="flex justify-between items-center text-[8px] text-slate-500 font-mono">
+                        <span className="flex items-center gap-1">
+                          <Clock size={8} />
+                          {act.time}
+                        </span>
+                        <span className="text-[#00e5ff]">MANTLE BLOCK</span>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* visual visualizer node */}
-              <div className="glass-panel p-4 flex flex-col gap-3">
-                <span className="text-[10px] text-[#94a3b8] font-bold uppercase tracking-wider">Quick Path Simulator</span>
-                <p className="text-[10px] text-[#94a3b8]">Select target basket below to preview compound swaps routing:</p>
-                <div className="flex flex-col gap-2">
+              {/* quick preview node flow router */}
+              <div className="panel p-4 flex flex-col gap-3">
+                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Quick Strategy Inspect</span>
+                <p className="text-[9.5px] text-slate-400">Select target basket below to view historical yield chart:</p>
+                <div className="flex flex-col gap-1.5">
                   {Object.keys(vaultsList).slice(0, 4).map((k) => (
                     <button
                       key={k}
@@ -1298,10 +1688,10 @@ export default function App() {
                         setSelectedVaultKey(k);
                         setCurrentView("detail");
                       }}
-                      className="p-2.5 rounded-lg border border-white/5 bg-black/25 flex justify-between items-center text-left hover:border-[#00ff9d]/30 text-[10px] text-white font-bold transition-all"
+                      className="p-2 rounded-lg border border-white/5 bg-black/25 flex justify-between items-center text-left hover:border-[#00ff88]/30 text-[10px] text-white font-bold transition-all"
                     >
                       <span>{vaultsList[k].name}</span>
-                      <ChevronRight size={12} className="text-[#94a3b8]" />
+                      <ChevronRight size={11} className="text-slate-500" />
                     </button>
                   ))}
                 </div>
@@ -1309,56 +1699,63 @@ export default function App() {
             </div>
           </main>
 
-          {/* Bottom mobile menu */}
+          {/* Bottom navigation bar for mobile viewports */}
           <div className="md:hidden mobile-nav-bar">
             <button 
               onClick={() => setCurrentView("baskets")} 
               className={`mobile-nav-item ${currentView === "baskets" || currentView === "detail" ? "active" : ""}`}
             >
-              <TrendingUp size={18} />
+              <Compass size={18} />
               <span>Invest</span>
             </button>
             <button 
               onClick={() => setCurrentView("dashboard")} 
               className={`mobile-nav-item ${currentView === "dashboard" ? "active" : ""}`}
             >
-              <DollarSign size={18} />
+              <Layers size={18} />
               <span>Portfolio</span>
+            </button>
+            <button 
+              onClick={() => setCurrentView("synthesizer")} 
+              className={`mobile-nav-item ${currentView === "synthesizer" ? "active" : ""}`}
+            >
+              <Plus size={18} />
+              <span>Synthesize</span>
             </button>
             <button 
               onClick={() => setCurrentView("leaderboard")} 
               className={`mobile-nav-item ${currentView === "leaderboard" ? "active" : ""}`}
             >
               <Award size={18} />
-              <span>Leaderboard</span>
+              <span>Rankings</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* --- BEGINNER DEFI TUTORIAL MODAL --- */}
+      {/* --- BEGINNER DEFI TUTORIAL ONBOARDING MODAL --- */}
       {tutorialOpen && (
         <div className="modal-overlay">
-          <div className="glass-panel max-w-xl w-full p-8 mx-4 border border-amber-500/20 relative flex flex-col justify-between min-h-[400px]">
+          <div className="panel max-w-lg w-full p-8 mx-4 border border-[#fbbf24]/10 relative flex flex-col justify-between min-h-[360px]">
             <div>
               <div className="flex justify-between items-center mb-6">
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">DeFi Beginner Guide</span>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-[#fbbf24] border border-amber-500/20 uppercase tracking-wider font-mono">DeFi Beginner Guide</span>
                 <button 
                   onClick={() => setTutorialOpen(false)}
-                  className="text-xs text-[#94a3b8] hover:text-white bg-transparent border-none cursor-pointer"
+                  className="text-xs text-slate-500 hover:text-white bg-transparent border-none cursor-pointer font-bold"
                 >
                   ✕ Close
                 </button>
               </div>
 
-              {/* Slide content */}
+              {/* Guide Contents */}
               {tutorialStep === 0 && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-2xl font-black text-white">💰 1. What are Digital Dollars?</h3>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <h3 className="text-xl font-black text-white">💰 1. What are Digital Dollars?</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Normally, blockchain accounts store volatile tokens like Ethereum whose prices bounce around. But there are also **Stablecoins** (like USDT and USDC) which are pegged directly to the US Dollar.
                   </p>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Think of stablecoins as **Digital Dollars**. A USDT balance is essentially cash stored in your web wallet. It does not fluctuate in price, making it the perfect foundation for saving and earning interest.
                   </p>
                 </div>
@@ -1366,11 +1763,11 @@ export default function App() {
 
               {tutorialStep === 1 && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-2xl font-black text-white">🍏 2. What is a Liquidity Pool?</h3>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <h3 className="text-xl font-black text-white">🍏 2. What is a Liquidity Pool?</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     In traditional finance, banks exchange currencies for you. In DeFi, we use automated smart contracts called **Liquidity Pools** (LPs) to trade assets.
                   </p>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Imagine a shared **Fruit Bowl** containing equal shares of apples (USDC) and oranges (mETH). Traders can throw in apples and grab oranges, paying a tiny credit card swap fee. The pool is funded by normal users (liquidity providers) who store their assets in the bowl and split those swap fees.
                   </p>
                 </div>
@@ -1378,11 +1775,11 @@ export default function App() {
 
               {tutorialStep === 2 && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-2xl font-black text-white">📈 3. Where does Yield APY come from?</h3>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <h3 className="text-xl font-black text-white">📈 3. Where does Yield APY come from?</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Every time a trader swaps tokens using a liquidity pool, a **0.25% fee** is charged. 
                   </p>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     These fees accumulate inside the pool. Because swap fees are collected in real-time on thousands of trades daily, the pool assets grow larger and larger. The percentage profit generated by these swap fees over a year is called your **Yield APY (Annual Percentage Yield)**.
                   </p>
                 </div>
@@ -1390,11 +1787,11 @@ export default function App() {
 
               {tutorialStep === 3 && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-2xl font-black text-white">🧺 4. What does BasketFlow do?</h3>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <h3 className="text-xl font-black text-white">🧺 4. What does BasketFlow do?</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     Ordinarily, to deposit into a pool, you would have to manually swap half your money, provide equal ratios, sign multiple approval transactions, and pay heavy gas fees.
                   </p>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     **BasketFlow automates this entire headache.** You deposit a single token (USDT or MNT) into a basket. Our smart contract automatically splits the asset, performs swaps, deposits liquidity to Merchant Moe, stakes the LP tokens to accrue returns, and auto-compounds the profit back in—all in **one click** with low gas fees.
                   </p>
                 </div>
@@ -1402,25 +1799,25 @@ export default function App() {
 
               {tutorialStep === 4 && (
                 <div className="flex flex-col gap-4">
-                  <h3 className="text-2xl font-black text-white">🛡️ 5. Safe & Simple Withdrawals</h3>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <h3 className="text-xl font-black text-white">🛡️ 5. Safe & Simple Withdrawals</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     When you stake in a basket, you receive **Vault Shares** representing your ownership of the LP assets.
                   </p>
-                  <p className="text-xs text-[#94a3b8] leading-relaxed">
+                  <p className="text-xs text-slate-400 leading-relaxed">
                     You are in complete control of your funds. There are no locking periods or exit penalties. At any point, you can request a withdrawal: the contract automatically unstakes your LP tokens, converts the underlying assets back into standard USDT, and transfers it directly to your wallet in a single transaction.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Stepper buttons */}
-            <div className="flex justify-between items-center mt-8 pt-4 border-t border-white/5">
-              <span className="text-[10px] text-[#64748b] font-bold">Slide {tutorialStep + 1} of 5</span>
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5">
+              <span className="text-[9px] text-slate-500 font-bold font-mono">STEP {tutorialStep + 1} OF 5</span>
               <div className="flex gap-2">
                 {tutorialStep > 0 && (
                   <button 
                     onClick={() => setTutorialStep(tutorialStep - 1)} 
-                    className="btn-secondary py-1 px-3 text-xs"
+                    className="btn-secondary py-1 px-3.5 text-xs font-bold"
                   >
                     Back
                   </button>
@@ -1428,14 +1825,14 @@ export default function App() {
                 {tutorialStep < 4 ? (
                   <button 
                     onClick={() => setTutorialStep(tutorialStep + 1)} 
-                    className="glow-btn-primary py-1 px-4 text-xs font-bold"
+                    className="btn-primary py-1 px-4 text-xs font-bold"
                   >
                     Next Step
                   </button>
                 ) : (
                   <button 
                     onClick={() => setTutorialOpen(false)}
-                    className="glow-btn-primary py-1 px-4 text-xs font-bold"
+                    className="btn-primary py-1 px-4 text-xs font-bold"
                   >
                     Finish Guide
                   </button>
@@ -1446,52 +1843,74 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TRANSACTION STEPS PROGRESS MODAL --- */}
+      {/* --- TRANSACTION PROGRESS STEP MODAL --- */}
       {txModalOpen && (
         <div className="modal-overlay">
-          <div className="glass-panel max-w-md w-full p-8 mx-4 border border-[#00ff9d]/25 relative text-center">
-            <h3 className="text-xl font-bold text-white mb-6 capitalize">
-              {txType === "deposit" ? "Processing Deposit" : "Processing Withdrawal"}
+          <div className="panel max-w-md w-full p-8 mx-4 border border-[#00ff88]/15 relative text-center">
+            <h3 className="text-base font-bold text-white mb-6 uppercase tracking-wider font-display">
+              {txType === "deposit" ? "Processing Deposit Stake" : "Processing Withdrawal Stake"}
             </h3>
 
-            {/* Loading */}
+            {/* Staking active states */}
             {txStatus === "loading" && (
               <div className="flex flex-col gap-6 items-center">
-                <RefreshCw size={36} className="animate-spin text-[#00ff9d] mb-2" />
+                <RefreshCw size={30} className="animate-spin text-[#00ff88] mb-1" />
                 
-                <div className="flex flex-col gap-3 w-full text-left">
+                <div className="flex flex-col gap-2.5 w-full text-left font-medium">
                   <div className="flex items-center gap-3">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${txStep > 1 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse"}`}>1</span>
-                    <span className={`text-xs font-bold ${txStep > 1 ? "text-emerald-400" : "text-white"}`}>Approving Token Spender Allowance</span>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      txStep > 1 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 animate-pulse"
+                    }`}>1</span>
+                    <span className={`text-xs ${txStep > 1 ? "text-emerald-400 font-bold" : "text-white"}`}>Approving Token Spender Allowance</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${txStep > 2 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : txStep === 2 ? "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse" : "bg-white/5 text-[#94a3b8] border border-white/5"}`}>2</span>
-                    <span className={`text-xs font-bold ${txStep > 2 ? "text-emerald-400" : txStep === 2 ? "text-white" : "text-[#64748b]"}`}>Exchanging swaps on Merchant Moe</span>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      txStep > 2 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : txStep === 2 
+                          ? "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 animate-pulse" 
+                          : "bg-white/5 text-slate-500 border border-white/5"
+                    }`}>2</span>
+                    <span className={`text-xs ${txStep > 2 ? "text-emerald-400 font-bold" : txStep === 2 ? "text-white" : "text-slate-500"}`}>Exchanging swaps on Merchant Moe</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${txStep > 3 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : txStep === 3 ? "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse" : "bg-white/5 text-[#94a3b8] border border-white/5"}`}>3</span>
-                    <span className={`text-xs font-bold ${txStep > 3 ? "text-emerald-400" : txStep === 3 ? "text-white" : "text-[#64748b]"}`}>Staking LP tokens in Compounding Vault</span>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      txStep > 3 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : txStep === 3 
+                          ? "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 animate-pulse" 
+                          : "bg-white/5 text-slate-500 border border-white/5"
+                    }`}>3</span>
+                    <span className={`text-xs ${txStep > 3 ? "text-emerald-400 font-bold" : txStep === 3 ? "text-white" : "text-slate-500"}`}>Staking LP tokens in Compounding Vault</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${txStep > 4 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : txStep === 4 ? "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse" : "bg-white/5 text-[#94a3b8] border border-white/5"}`}>4</span>
-                    <span className={`text-xs font-bold ${txStep > 4 ? "text-emerald-400" : txStep === 4 ? "text-white" : "text-[#64748b]"}`}>Issuing BasketFlow shares to wallet</span>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      txStep > 4 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : txStep === 4 
+                          ? "bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 animate-pulse" 
+                          : "bg-white/5 text-slate-500 border border-white/5"
+                    }`}>4</span>
+                    <span className={`text-xs ${txStep > 4 ? "text-emerald-400 font-bold" : txStep === 4 ? "text-white" : "text-slate-500"}`}>Issuing BasketFlow shares to wallet</span>
                   </div>
                 </div>
-                <p className="text-xs text-[#94a3b8] mt-4">Please confirm transactions in MetaMask when prompted.</p>
+                <p className="text-[10px] text-slate-400 mt-2 font-mono">Confirm transactions in MetaMask when prompted.</p>
               </div>
             )}
 
             {/* Success */}
             {txStatus === "success" && (
               <div className="flex flex-col gap-4 items-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-3xl">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-[#00ff88]/30 flex items-center justify-center text-xl text-[#00ff88] font-bold">
                   ✓
                 </div>
-                <h4 className="text-xl font-bold text-white">Staking Successful</h4>
-                <p className="text-xs text-[#94a3b8]">Your deposit has been swapped, pooled, and staked. Shares have been minted to your address.</p>
+                <h4 className="text-base font-bold text-white">Staking Successful</h4>
+                <p className="text-xs text-slate-400 px-4">Your deposit has been successfully swapped, pooled, and staked. Shares have been issued to your address.</p>
                 <button 
                   onClick={() => setTxModalOpen(false)}
-                  className="glow-btn-primary w-full py-3 mt-4 text-xs font-bold"
+                  className="btn-primary w-full py-3 mt-4 text-xs font-bold"
                 >
                   Return to Dashboard
                 </button>
@@ -1501,11 +1920,11 @@ export default function App() {
             {/* Error */}
             {txStatus === "error" && (
               <div className="flex flex-col gap-4 items-center">
-                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-3xl">
+                <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-[#f43f5e]/30 flex items-center justify-center text-xl text-[#f43f5e] font-bold">
                   ✕
                 </div>
-                <h4 className="text-xl font-bold text-red-500">Transaction Failed</h4>
-                <p className="text-xs text-[#94a3b8] max-h-24 overflow-y-auto w-full p-2.5 bg-black/20 rounded-xl border border-white/5 text-left font-mono">
+                <h4 className="text-base font-bold text-[#f43f5e]">Transaction Failed</h4>
+                <p className="text-xs text-slate-400 max-h-24 overflow-y-auto w-full p-2.5 bg-black/40 rounded-xl border border-white/5 text-left font-mono text-[10.5px]">
                   {txError}
                 </p>
                 <button 
@@ -1514,173 +1933,6 @@ export default function App() {
                 >
                   Dismiss
                 </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* --- CREATE CUSTOM BASKET MODAL --- */}
-      {createBasketModalOpen && (
-        <div className="modal-overlay">
-          <div className="glass-panel max-w-md w-full p-8 mx-4 border border-[#00ff9d]/25 relative">
-            <h3 className="text-xl font-bold text-center text-white mb-6">Create Custom Strategy</h3>
-
-            {createBasketStatus === "idle" && (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Strategy Name</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. My Custom Hyperpool" 
-                    value={newBasketName}
-                    onChange={(e) => setNewBasketName(e.target.value)}
-                    className="bg-black/40 border border-white/5 text-white rounded-xl px-3 py-2 text-xs font-semibold outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Token A</label>
-                    <select 
-                      value={newBasketTokenA}
-                      onChange={(e) => setNewBasketTokenA(e.target.value as any)}
-                      className="bg-[#0f172a] border border-white/5 text-white text-xs font-bold rounded-lg px-2 py-2 outline-none"
-                    >
-                      <option value="USDT">USDT</option>
-                      <option value="USDC">USDC</option>
-                      <option value="mETH">mETH</option>
-                      <option value="MNT">MNT</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Token B</label>
-                    <select 
-                      value={newBasketTokenB}
-                      onChange={(e) => setNewBasketTokenB(e.target.value as any)}
-                      className="bg-[#0f172a] border border-white/5 text-white text-xs font-bold rounded-lg px-2 py-2 outline-none"
-                    >
-                      <option value="USDT">USDT</option>
-                      <option value="USDC">USDC</option>
-                      <option value="mETH">mETH</option>
-                      <option value="MNT">MNT</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between text-[10px] text-[#94a3b8] font-bold uppercase">
-                    <span>Token A Weight</span>
-                    <span>{newBasketWeightA}% / {100 - newBasketWeightA}%</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="10" 
-                    max="90" 
-                    step="5" 
-                    value={newBasketWeightA}
-                    onChange={(e) => setNewBasketWeightA(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#00ff9d]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Target APY (%)</label>
-                    <input 
-                      type="number" 
-                      placeholder="18.5" 
-                      value={newBasketApy}
-                      onChange={(e) => setNewBasketApy(e.target.value)}
-                      className="bg-black/40 border border-white/5 text-white rounded-xl px-3 py-2 text-xs font-semibold outline-none"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Risk Profile</label>
-                    <select 
-                      value={newBasketRisk}
-                      onChange={(e) => setNewBasketRisk(e.target.value)}
-                      className="bg-[#0f172a] border border-white/5 text-white text-xs font-bold rounded-lg px-2 py-2 outline-none"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-[#94a3b8] font-bold uppercase">Description</label>
-                  <textarea 
-                    rows={2}
-                    placeholder="Describe your strategy goals..." 
-                    value={newBasketDesc}
-                    onChange={(e) => setNewBasketDesc(e.target.value)}
-                    className="bg-black/40 border border-white/5 text-white rounded-xl px-3 py-2 text-xs font-semibold outline-none resize-none"
-                  />
-                </div>
-
-                <div className="flex gap-4 mt-4">
-                  <button 
-                    onClick={handleCreateBasket}
-                    disabled={!newBasketName}
-                    className="glow-btn-primary flex-1 py-3 text-xs font-bold"
-                  >
-                    Compile & Deploy
-                  </button>
-                  <button 
-                    onClick={() => setCreateBasketModalOpen(false)}
-                    className="btn-secondary flex-1 py-3 text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {createBasketStatus === "loading" && (
-              <div className="flex flex-col gap-6 items-center py-6">
-                <RefreshCw size={36} className="animate-spin text-[#00ff9d] mb-2" />
-                <div className="flex flex-col gap-3 w-full text-left">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${createBasketStep > 1 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse"}`}>1</span>
-                    <span className={`text-xs font-bold ${createBasketStep > 1 ? "text-emerald-400" : "text-white"}`}>Compiling Strategy bytecode (via Yul Optimizer)</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${createBasketStep > 2 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : createBasketStep === 2 ? "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse" : "bg-white/5 text-[#94a3b8] border border-white/5"}`}>2</span>
-                    <span className={`text-xs font-bold ${createBasketStep > 2 ? "text-emerald-400" : createBasketStep === 2 ? "text-white" : "text-[#64748b]"}`}>Deploying Vault Proxy to Mantle Network</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${createBasketStep > 3 ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : createBasketStep === 3 ? "bg-[#00ff9d]/10 text-[#00ff9d] border border-[#00ff9d]/20 animate-pulse" : "bg-white/5 text-[#94a3b8] border border-white/5"}`}>3</span>
-                    <span className={`text-xs font-bold ${createBasketStep > 3 ? "text-emerald-400" : createBasketStep === 3 ? "text-white" : "text-[#64748b]"}`}>Registering Moe Router LP configurations</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {createBasketStatus === "success" && (
-              <div className="flex flex-col gap-4 items-center text-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-2xl">
-                  ✓
-                </div>
-                <h4 className="text-xl font-bold text-white">Strategy Deployed</h4>
-                <p className="text-xs text-[#94a3b8]">Your custom strategy contract is now live on the local chain.</p>
-              </div>
-            )}
-
-            {createBasketStatus === "error" && (
-              <div className="flex flex-col gap-4 items-center">
-                <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-2xl">
-                  ✕
-                </div>
-                <h4 className="text-xl font-bold text-red-500">Deployment Failed</h4>
-                <p className="text-xs text-[#94a3b8] font-mono bg-black/20 p-2.5 rounded-xl border border-white/5 w-full text-left">
-                  {createBasketError}
-                </p>
-                <div className="flex gap-4 w-full mt-4">
-                  <button onClick={handleCreateBasket} className="glow-btn-primary flex-1 py-2 text-xs font-bold">Retry</button>
-                  <button onClick={() => { setCreateBasketModalOpen(false); setCreateBasketStatus("idle"); }} className="btn-secondary flex-1 py-2 text-xs font-bold">Cancel</button>
-                </div>
               </div>
             )}
           </div>
