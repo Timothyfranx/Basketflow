@@ -162,13 +162,102 @@ export const CompositionChart = memo(({ allocations }: { allocations: any[] }) =
   );
 });
 
-// --- HIGH-FIDELITY ROUTING VISUALIZER (SVG NATIVE ANIMATED PIPELINE) ---
-interface YieldRoutingVisualizerProps {
-  liveApys: Record<string, number>;
+// --- DYNAMIC HERO STATS TICKER (ISOLATED TO PREVENT PARENT RE-RENDERING) ---
+export const HeroStats = memo(() => {
+  const [liveTVL, setLiveTVL] = useState<number>(3824000);
+  const [liveDepositors, setLiveDepositors] = useState<number>(4590);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveTVL((prev) => prev + Math.floor((Math.random() - 0.45) * 350));
+      setLiveDepositors((prev) => prev + (Math.random() > 0.85 ? 1 : Math.random() < 0.15 ? -1 : 0));
+    }, 6000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="grid grid-cols-3 gap-4 mt-8 pt-6 border-t border-white/5 w-full max-w-xl">
+      <div>
+        <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Total Value Locked</div>
+        <div className="text-base sm:text-xl font-extrabold text-white mt-0.5 font-mono">
+          ${liveTVL.toLocaleString()}
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Average APY</div>
+        <div className="text-base sm:text-xl font-extrabold text-[#00ff88] mt-0.5 font-mono">18.4%</div>
+      </div>
+      <div>
+        <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Active Users</div>
+        <div className="text-base sm:text-xl font-extrabold text-[#00e5ff] mt-0.5 font-mono">
+          {liveDepositors.toLocaleString()}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// --- LIVE EVENT EXPLORER (ISOLATED RENDER CYCLES FOR explorer STREAM) ---
+interface LiveEventExplorerProps {
   vaultsList: Record<string, any>;
 }
 
-export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRoutingVisualizerProps) => {
+export const LiveEventExplorer = memo(({ vaultsList }: LiveEventExplorerProps) => {
+  const [activities, setActivities] = useState<Array<{ id: number; text: string; time: string }>>([
+    { id: 1, text: "0x8a...4b deposited $2,500 into Moe Powerhouse", time: "Just now" },
+    { id: 2, text: "replytim.mnt staked $1,200 in Stable Shuffle", time: "3m ago" },
+    { id: 3, text: "0x9c...7f withdrew $600 from Conservative Care", time: "8m ago" },
+  ]);
+
+  useEffect(() => {
+    const addresses = ["0x8a", "vitalik.mnt", "replytim.eth", "0xef", "0x5d", "mimi.mnt", "dan.mnt"];
+    const actions = ["deposited", "withdrew"];
+    const values = [500, 1200, 3000, 7500, 15000];
+
+    const timer = setInterval(() => {
+      const keys = Object.keys(vaultsList);
+      if (keys.length === 0) return;
+      const key = keys[Math.floor(Math.random() * keys.length)];
+      const action = actions[Math.floor(Math.random() * actions.length)];
+      const amount = values[Math.floor(Math.random() * values.length)];
+      const user = addresses[Math.floor(Math.random() * addresses.length)] + (Math.random() > 0.6 ? "" : "...3e");
+      
+      const text = `${user} ${action} $${amount.toLocaleString()} ${action === "deposited" ? "into" : "from"} ${vaultsList[key].name}`;
+      setActivities((prev) => [{ id: Date.now(), text, time: "Just now" }, ...prev.slice(0, 2)]);
+    }, 9000);
+    return () => clearInterval(timer);
+  }, [vaultsList]);
+
+  return (
+    <div className="panel p-4 flex flex-col gap-4">
+      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
+        <span className="pulse-dot" />
+        Live Event Explorer
+      </span>
+      <div className="flex flex-col gap-2">
+        {activities.map((act) => (
+          <div key={act.id} className="p-2.5 rounded-xl bg-white/2 border border-white/5 text-[9.5px] text-slate-400 flex flex-col gap-1">
+            <span className="font-medium text-slate-200 leading-normal">{act.text}</span>
+            <div className="flex justify-between items-center text-[8px] text-slate-500 font-mono">
+              <span className="flex items-center gap-1">
+                <Clock size={8} />
+                {act.time}
+              </span>
+              <span className="text-[#00e5ff]">MANTLE BLOCK</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+// --- HIGH-FIDELITY ROUTING VISUALIZER (SVG ACTIVE PIPELINE WITH HARDWARE-ACCELERATED FLOWS) ---
+interface YieldRoutingVisualizerProps {
+  vaultsList: Record<string, any>;
+}
+
+export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualizerProps) => {
   const [simAmount, setSimAmount] = useState<string>("1000");
   const [simToken, setSimToken] = useState<"USDT" | "USDC" | "MNT">("USDT");
   const [simVaultKey, setSimVaultKey] = useState<string>("conservative");
@@ -176,7 +265,17 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
   
   const simYieldSpanRef = useRef<HTMLSpanElement>(null);
   const activeVault = vaultsList[simVaultKey] || vaultsList["conservative"];
-  const apy = liveApys[simVaultKey] || 10.0;
+  
+  // Statically parse strategy APY for simulation
+  const apy = (() => {
+    if (!activeVault || !activeVault.targetApy) return 10.0;
+    const clean = activeVault.targetApy.replace("%", "");
+    const parts = clean.split("-");
+    if (parts.length === 2) {
+      return (parseFloat(parts[0]) + parseFloat(parts[1])) / 2;
+    }
+    return parseFloat(clean) || 10.0;
+  })();
 
   useEffect(() => {
     let timer: any;
@@ -301,72 +400,76 @@ export const YieldRoutingVisualizer = memo(({ liveApys, vaultsList }: YieldRouti
         {/* Right Node Canvas Visualizer */}
         <div className="lg:col-span-2 p-4 bg-black/40 border border-white/5 rounded-2xl flex flex-col justify-between relative min-h-[220px]">
           
-          {/* Node SVG network */}
+          {/* Node SVG network with Hardware Accelerated CSS Dash Flows */}
           <div className="w-full h-full relative min-h-[170px] flex items-center justify-center">
-            <svg viewBox="0 0 600 160" className="w-full h-full absolute inset-0 z-0 overflow-visible">
+            <svg 
+              viewBox="0 0 600 160" 
+              className="w-full h-full absolute inset-0 z-0 overflow-visible"
+              style={{ transform: 'translate3d(0,0,0)', willChange: 'transform' }}
+            >
               
               {/* Pipeline paths */}
               {/* Path 1: Wallet -> Router */}
-              <path d="M 50,80 L 220,80" stroke={simState !== "idle" ? "rgba(0, 255, 136, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2.5" fill="none" />
+              <path d="M 50,80 L 220,80" stroke="rgba(255,255,255,0.03)" strokeWidth="3.5" fill="none" />
               
               {/* Path 2A: Router -> Token A */}
-              <path d="M 220,80 C 270,80 290,40 370,40" stroke={simState === "swapping" || simState === "pooling" || simState === "complete" ? "rgba(0, 229, 255, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              <path d="M 220,80 C 270,80 290,40 370,40" stroke="rgba(255,255,255,0.03)" strokeWidth="3" fill="none" />
               
               {/* Path 2B: Router -> Token B */}
-              <path d="M 220,80 C 270,80 290,120 370,120" stroke={simState === "swapping" || simState === "pooling" || simState === "complete" ? "rgba(0, 229, 255, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              <path d="M 220,80 C 270,80 290,120 370,120" stroke="rgba(255,255,255,0.03)" strokeWidth="3" fill="none" />
               
               {/* Path 3A: Token A -> Vault */}
-              <path d="M 370,40 C 450,40 470,80 540,80" stroke={simState === "pooling" || simState === "complete" ? "rgba(99, 102, 241, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              <path d="M 370,40 C 450,40 470,80 540,80" stroke="rgba(255,255,255,0.03)" strokeWidth="3" fill="none" />
               
               {/* Path 3B: Token B -> Vault */}
-              <path d="M 370,120 C 450,120 470,80 540,80" stroke={simState === "pooling" || simState === "complete" ? "rgba(99, 102, 241, 0.4)" : "rgba(255,255,255,0.04)"} strokeWidth="2" fill="none" />
+              <path d="M 370,120 C 450,120 470,80 540,80" stroke="rgba(255,255,255,0.03)" strokeWidth="3" fill="none" />
 
-              {/* Animated Particles flowing using browser-native animateMotion (NO CPU LAG) */}
-              {simState === "routing" && (
-                <circle r="4.5" fill="#00ff88">
-                  <animateMotion dur="1.2s" repeatCount="indefinite" path="M 50,80 L 220,80" />
-                </circle>
+              {/* Glowing active flow overlays animated in GPU via CSS stroke-dashoffset */}
+              {(simState === "routing" || simState === "complete") && (
+                <path 
+                  d="M 50,80 L 220,80" 
+                  stroke="#00ff88" 
+                  strokeWidth="3.5" 
+                  fill="none" 
+                  className="flow-line-active" 
+                />
               )}
               
-              {(simState === "swapping") && (
+              {(simState === "swapping" || simState === "complete") && (
                 <>
-                  <circle r="3.5" fill="#00e5ff">
-                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 220,80 C 270,80 290,40 370,40" />
-                  </circle>
-                  <circle r="3.5" fill="#00e5ff">
-                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 220,80 C 270,80 290,120 370,120" />
-                  </circle>
+                  <path 
+                    d="M 220,80 C 270,80 290,40 370,40" 
+                    stroke="#00e5ff" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    className="flow-line-active" 
+                  />
+                  <path 
+                    d="M 220,80 C 270,80 290,120 370,120" 
+                    stroke="#00e5ff" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    className="flow-line-active" 
+                  />
                 </>
               )}
 
-              {(simState === "pooling") && (
+              {(simState === "pooling" || simState === "complete") && (
                 <>
-                  <circle r="3.5" fill="#6366f1">
-                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 370,40 C 450,40 470,80 540,80" />
-                  </circle>
-                  <circle r="3.5" fill="#6366f1">
-                    <animateMotion dur="1.2s" repeatCount="indefinite" path="M 370,120 C 450,120 470,80 540,80" />
-                  </circle>
-                </>
-              )}
-
-              {simState === "complete" && (
-                <>
-                  <circle r="3" fill="#00ff88" opacity="0.8">
-                    <animateMotion dur="2s" repeatCount="indefinite" path="M 50,80 L 220,80" />
-                  </circle>
-                  <circle r="3" fill="#00e5ff" opacity="0.8">
-                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 220,80 C 270,80 290,40 370,40" />
-                  </circle>
-                  <circle r="3" fill="#00e5ff" opacity="0.8">
-                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 220,80 C 270,80 290,120 370,120" />
-                  </circle>
-                  <circle r="3" fill="#6366f1" opacity="0.8">
-                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 370,40 C 450,40 470,80 540,80" />
-                  </circle>
-                  <circle r="3" fill="#6366f1" opacity="0.8">
-                    <animateMotion dur="2.4s" repeatCount="indefinite" path="M 370,120 C 450,120 470,80 540,80" />
-                  </circle>
+                  <path 
+                    d="M 370,40 C 450,40 470,80 540,80" 
+                    stroke="#6366f1" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    className="flow-line-active" 
+                  />
+                  <path 
+                    d="M 370,120 C 450,120 470,80 540,80" 
+                    stroke="#6366f1" 
+                    strokeWidth="3" 
+                    fill="none" 
+                    className="flow-line-active" 
+                  />
                 </>
               )}
             </svg>
@@ -492,8 +595,6 @@ export default function App() {
   const [txError, setTxError] = useState<string>("");
 
   // Live stats triggers
-  const [liveTVL, setLiveTVL] = useState<number>(3824000);
-  const [liveDepositors, setLiveDepositors] = useState<number>(4590);
   const [liveApys, setLiveApys] = useState<Record<string, number>>(() => {
     const initialApys: Record<string, number> = {};
     Object.keys(VAULTS).forEach((key) => {
@@ -503,12 +604,6 @@ export default function App() {
     return initialApys;
   });
   const [apyDirection, setApyDirection] = useState<Record<string, "up" | "down" | "flat">>({});
-
-  const [activities, setActivities] = useState<Array<{ id: number; text: string; time: string }>>([
-    { id: 1, text: "0x8a...4b deposited $2,500 into Moe Powerhouse", time: "Just now" },
-    { id: 2, text: "replytim.mnt staked $1,200 in Stable Shuffle", time: "3m ago" },
-    { id: 3, text: "0x9c...7f withdrew $600 from Conservative Care", time: "8m ago" },
-  ]);
 
   // Onboarding Tutorial slides
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(false);
@@ -557,29 +652,7 @@ export default function App() {
         setTimeout(() => setApyDirection({}), 2200);
         return next;
       });
-      setLiveTVL((prev) => prev + Math.floor((Math.random() - 0.45) * 350));
-      setLiveDepositors((prev) => prev + (Math.random() > 0.85 ? 1 : Math.random() < 0.15 ? -1 : 0));
     }, 6000);
-    return () => clearInterval(timer);
-  }, [vaultsList]);
-
-  // Dynamic activity explorer tick feeds
-  useEffect(() => {
-    const addresses = ["0x8a", "vitalik.mnt", "replytim.eth", "0xef", "0x5d", "mimi.mnt", "dan.mnt"];
-    const actions = ["deposited", "withdrew"];
-    const values = [500, 1200, 3000, 7500, 15000];
-
-    const timer = setInterval(() => {
-      const keys = Object.keys(vaultsList);
-      if (keys.length === 0) return;
-      const key = keys[Math.floor(Math.random() * keys.length)];
-      const action = actions[Math.floor(Math.random() * actions.length)];
-      const amount = values[Math.floor(Math.random() * values.length)];
-      const user = addresses[Math.floor(Math.random() * addresses.length)] + (Math.random() > 0.6 ? "" : "...3e");
-      
-      const text = `${user} ${action} $${amount.toLocaleString()} ${action === "deposited" ? "into" : "from"} ${vaultsList[key].name}`;
-      setActivities((prev) => [{ id: Date.now(), text, time: "Just now" }, ...prev.slice(0, 2)]);
-    }, 9000);
     return () => clearInterval(timer);
   }, [vaultsList]);
 
@@ -831,30 +904,13 @@ export default function App() {
               </div>
 
               {/* Ticker Stats */}
-              <div className="grid grid-cols-3 gap-4 mt-8 pt-6 border-t border-white/5 w-full max-w-xl">
-                <div>
-                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Total Value Locked</div>
-                  <div className="text-base sm:text-xl font-extrabold text-white mt-0.5 font-mono">
-                    ${liveTVL.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Average APY</div>
-                  <div className="text-base sm:text-xl font-extrabold text-[#00ff88] mt-0.5 font-mono">18.4%</div>
-                </div>
-                <div>
-                  <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-mono">Active Users</div>
-                  <div className="text-base sm:text-xl font-extrabold text-[#00e5ff] mt-0.5 font-mono">
-                    {liveDepositors.toLocaleString()}
-                  </div>
-                </div>
-              </div>
+              <HeroStats />
             </div>
 
             {/* Signature animated routing node flow */}
             <div className="flex flex-col gap-4">
               <h2 className="text-xl font-bold text-center text-white">How Dynamic Yield Routing Works</h2>
-              <YieldRoutingVisualizer liveApys={liveApys} vaultsList={vaultsList} />
+              <YieldRoutingVisualizer vaultsList={vaultsList} />
             </div>
 
             {/* Preset Baskets Grid */}
@@ -1655,26 +1711,7 @@ export default function App() {
             <div className="hidden lg:flex flex-col w-72 shrink-0 border-l border-white/5 bg-black/10 p-5 gap-5">
               
               {/* Explorer block */}
-              <div className="panel p-4 flex flex-col gap-4">
-                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                  <span className="pulse-dot" />
-                  Live Event Explorer
-                </span>
-                <div className="flex flex-col gap-2">
-                  {activities.map((act) => (
-                    <div key={act.id} className="p-2.5 rounded-xl bg-white/2 border border-white/5 text-[9.5px] text-slate-400 flex flex-col gap-1">
-                      <span className="font-medium text-slate-200 leading-normal">{act.text}</span>
-                      <div className="flex justify-between items-center text-[8px] text-slate-500 font-mono">
-                        <span className="flex items-center gap-1">
-                          <Clock size={8} />
-                          {act.time}
-                        </span>
-                        <span className="text-[#00e5ff]">MANTLE BLOCK</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <LiveEventExplorer vaultsList={vaultsList} />
 
               {/* quick preview node flow router */}
               <div className="panel p-4 flex flex-col gap-3">
