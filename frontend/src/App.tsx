@@ -472,59 +472,128 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
                   />
                 </>
               )}
-            </svg>
 
-            {/* Wallet Node */}
-            <div className="absolute left-[15px] flex flex-col items-center">
-              <div className={`w-14 h-14 rounded-xl border bg-black/60 flex flex-col items-center justify-center transition-all duration-300 z-10 ${
-                simState !== "idle" ? "border-[#00ff88] shadow-[0_0_12px_rgba(0,255,136,0.15)]" : "border-white/5"
-              }`}>
-                <span className="text-lg">💳</span>
-                <span className="text-[9px] font-bold text-white mt-0.5">{simAmount}</span>
-              </div>
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 font-mono">{simToken}</span>
-            </div>
+              {/* Wallet Node Group */}
+              <g>
+                <rect 
+                  x="30" 
+                  y="60" 
+                  width="40" 
+                  height="40" 
+                  rx="8" 
+                  ry="8" 
+                  fill="rgba(5, 8, 20, 0.9)" 
+                  stroke={simState !== "idle" ? "#00ff88" : "rgba(255, 255, 255, 0.05)"} 
+                  strokeWidth="1.5" 
+                  className="transition-all duration-300"
+                  style={{
+                    filter: simState !== "idle" ? "drop-shadow(0 0 8px rgba(0, 255, 136, 0.25))" : "none"
+                  }}
+                />
+                <text x="50" y="78" textAnchor="middle" fontSize="14">💳</text>
+                <text x="50" y="92" textAnchor="middle" fontSize="8" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{simAmount}</text>
+                <text x="50" y="115" textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold" letterSpacing="0.05em" fontFamily="monospace">{simToken}</text>
+              </g>
 
-            {/* Router Node */}
-            <div className="absolute left-[190px] flex flex-col items-center">
-              <div className={`w-16 h-16 rounded-full border bg-black/80 flex flex-col items-center justify-center transition-all duration-500 z-10 relative ${
-                simState === "swapping" ? "border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.2)] scale-105" :
-                simState === "pooling" || simState === "complete" ? "border-[#6366f1] shadow-[0_0_10px_rgba(99,102,241,0.15)]" : "border-white/5"
-              }`}>
+              {/* Router Node Group */}
+              <g>
+                <circle 
+                  cx="220" 
+                  cy="80" 
+                  r="24" 
+                  fill="rgba(5, 8, 20, 0.9)" 
+                  stroke={
+                    simState === "swapping" ? "#00e5ff" : 
+                    simState === "pooling" || simState === "complete" ? "#6366f1" : 
+                    "rgba(255, 255, 255, 0.05)"
+                  } 
+                  strokeWidth="1.5" 
+                  className="transition-all duration-500"
+                  style={{
+                    filter: simState === "swapping" ? "drop-shadow(0 0 8px rgba(0, 229, 255, 0.25))" : 
+                            simState === "pooling" || simState === "complete" ? "drop-shadow(0 0 8px rgba(99, 102, 241, 0.25))" : "none"
+                  }}
+                />
                 {simState === "swapping" && (
-                  <div className="absolute inset-1 border border-dashed border-[#00e5ff] rounded-full animate-spin" />
+                  <circle 
+                    cx="220" 
+                    cy="80" 
+                    r="20" 
+                    fill="none" 
+                    stroke="#00e5ff" 
+                    strokeWidth="1" 
+                    strokeDasharray="4, 4" 
+                    className="animate-spin" 
+                    style={{ transformOrigin: '220px 80px' }} 
+                  />
                 )}
-                <span className="text-lg">🧺</span>
-                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 font-mono">ROUTER</span>
-              </div>
-            </div>
+                <text x="220" y="81" textAnchor="middle" fontSize="14">🧺</text>
+                <text x="220" y="92" textAnchor="middle" fontSize="5.5" fill="#64748b" fontWeight="bold" letterSpacing="0.1em" fontFamily="monospace">ROUTER</text>
+              </g>
 
-            {/* LP Splits Node (Token A / B) */}
-            <div className="absolute left-[340px] flex flex-col gap-6 justify-between h-[150px] py-1.5">
-              <div className={`w-14 h-10 rounded-lg border bg-black/60 flex flex-col items-center justify-center transition-all duration-500 z-10 ${
-                simState === "swapping" || simState === "pooling" || simState === "complete" ? "border-[#00e5ff]" : "border-white/5"
-              }`}>
-                <span className="text-[10px] font-bold text-white font-mono">{activeVault.allocations[0]?.token.symbol || "USDT"}</span>
-                <span className="text-[8px] text-[#00e5ff] font-bold font-mono">{activeVault.allocations[0]?.weight || 50}%</span>
-              </div>
-              <div className={`w-14 h-10 rounded-lg border bg-black/60 flex flex-col items-center justify-center transition-all duration-500 z-10 ${
-                simState === "swapping" || simState === "pooling" || simState === "complete" ? "border-[#00e5ff]" : "border-white/5"
-              }`}>
-                <span className="text-[10px] font-bold text-white font-mono">{activeVault.allocations[1]?.token.symbol || "USDC"}</span>
-                <span className="text-[8px] text-[#00e5ff] font-bold font-mono">{activeVault.allocations[1]?.weight || 50}%</span>
-              </div>
-            </div>
+              {/* LP Splits Node (Token A / B) */}
+              <g>
+                {/* Token A */}
+                <rect 
+                  x="352" 
+                  y="27" 
+                  width="36" 
+                  height="26" 
+                  rx="6" 
+                  ry="6" 
+                  fill="rgba(5, 8, 20, 0.9)" 
+                  stroke={
+                    simState === "swapping" || simState === "pooling" || simState === "complete" ? "#00e5ff" : 
+                    "rgba(255, 255, 255, 0.05)"
+                  } 
+                  strokeWidth="1.5" 
+                  className="transition-all duration-500"
+                />
+                <text x="370" y="38" textAnchor="middle" fontSize="7.5" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{activeVault.allocations[0]?.token.symbol || "USDT"}</text>
+                <text x="370" y="47" textAnchor="middle" fontSize="6.5" fill="#00e5ff" fontWeight="bold" fontFamily="monospace">{activeVault.allocations[0]?.weight || 50}%</text>
 
-            {/* Target Vault Node */}
-            <div className="absolute right-[15px] flex flex-col items-center">
-              <div className={`w-15 h-15 rounded-xl border bg-black/60 flex flex-col items-center justify-center transition-all duration-300 z-10 ${
-                simState === "complete" ? "border-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.3)] scale-105" : "border-white/5"
-              }`}>
-                <span className="text-xl">🛡️</span>
-                <span className="text-[9px] font-black text-white mt-0.5">{activeVault.symbol}</span>
-              </div>
-              <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 font-mono">STAKED</span>
-            </div>
+                {/* Token B */}
+                <rect 
+                  x="352" 
+                  y="107" 
+                  width="36" 
+                  height="26" 
+                  rx="6" 
+                  ry="6" 
+                  fill="rgba(5, 8, 20, 0.9)" 
+                  stroke={
+                    simState === "swapping" || simState === "pooling" || simState === "complete" ? "#00e5ff" : 
+                    "rgba(255, 255, 255, 0.05)"
+                  } 
+                  strokeWidth="1.5" 
+                  className="transition-all duration-500"
+                />
+                <text x="370" y="118" textAnchor="middle" fontSize="7.5" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{activeVault.allocations[1]?.token.symbol || "USDC"}</text>
+                <text x="370" y="127" textAnchor="middle" fontSize="6.5" fill="#00e5ff" fontWeight="bold" fontFamily="monospace">{activeVault.allocations[1]?.weight || 50}%</text>
+              </g>
+
+              {/* Target Vault Node Group */}
+              <g>
+                <rect 
+                  x="520" 
+                  y="60" 
+                  width="40" 
+                  height="40" 
+                  rx="8" 
+                  ry="8" 
+                  fill="rgba(5, 8, 20, 0.9)" 
+                  stroke={simState === "complete" ? "#00ff88" : "rgba(255, 255, 255, 0.05)"} 
+                  strokeWidth="1.5" 
+                  className="transition-all duration-300"
+                  style={{
+                    filter: simState === "complete" ? "drop-shadow(0 0 10px rgba(0, 255, 136, 0.3))" : "none"
+                  }}
+                />
+                <text x="540" y="78" textAnchor="middle" fontSize="14">🛡️</text>
+                <text x="540" y="92" textAnchor="middle" fontSize="7" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{activeVault.symbol}</text>
+                <text x="540" y="115" textAnchor="middle" fontSize="8" fill="#94a3b8" fontWeight="bold" letterSpacing="0.05em" fontFamily="monospace">STAKED</text>
+              </g>
+            </svg>
           </div>
 
           {/* Description status updates */}
