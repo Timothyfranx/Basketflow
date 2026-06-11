@@ -36,6 +36,7 @@ interface InterestTickerProps {
 
 export const InterestTicker = memo(({ shares, liveApys, vaultsList, speedUp = 3.0, prefix = "" }: InterestTickerProps) => {
   const spanRef = useRef<HTMLSpanElement>(null);
+  const accruedRef = useRef<number>(0);
 
   useEffect(() => {
     let totalYieldPerSecond = 0;
@@ -48,18 +49,18 @@ export const InterestTicker = memo(({ shares, liveApys, vaultsList, speedUp = 3.
     });
 
     if (totalYieldPerSecond === 0) {
+      accruedRef.current = 0;
       if (spanRef.current) spanRef.current.textContent = `${prefix}$0.000000`;
       return;
     }
 
-    let currentAccrued = 0;
-    const intervalMs = 60; // 16 FPS updates
+    const intervalMs = 250; // 4 updates per second (was 60ms) to prevent lag
     const increment = (totalYieldPerSecond * (intervalMs / 1000)) * speedUp;
 
     const timer = setInterval(() => {
-      currentAccrued += increment;
+      accruedRef.current += increment;
       if (spanRef.current) {
-        spanRef.current.textContent = `${prefix}$${currentAccrued.toFixed(6)}`;
+        spanRef.current.textContent = `${prefix}$${accruedRef.current.toFixed(6)}`;
       }
     }, intervalMs);
 
@@ -295,12 +296,13 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
       const speedUp = 300; // Accelerated compound speed
 
       let accrued = 0;
+      const intervalMs = 250; // 4 updates per second (was 50ms) to prevent lag
       yieldInterval = setInterval(() => {
-        accrued += (yieldPerSecond * 0.05) * speedUp;
+        accrued += (yieldPerSecond * (intervalMs / 1000)) * speedUp;
         if (simYieldSpanRef.current) {
           simYieldSpanRef.current.textContent = `+$${accrued.toFixed(6)}`;
         }
-      }, 50);
+      }, intervalMs);
     } else if (simState === "idle") {
       if (simYieldSpanRef.current) {
         simYieldSpanRef.current.textContent = "+$0.000000";
@@ -739,7 +741,7 @@ export default function App() {
         setTimeout(() => setApyDirection({}), 2200);
         return next;
       });
-    }, 6000);
+    }, 30000);
     return () => clearInterval(timer);
   }, [vaultsList]);
 
