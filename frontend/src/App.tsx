@@ -23,6 +23,8 @@ import {
 import { parseUnits } from "viem";
 import { TOKENS, VAULTS, VAULT_ABI, ERC20_ABI } from "./contracts";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 // --- MEMOIZED COUNTERS & PERFORMANCE TICKERS (DIRECT-DOM OPTIMIZATION TO PREVENT LAGGING) ---
 interface InterestTickerProps {
   shares: Record<string, number>;
@@ -694,6 +696,22 @@ export default function App() {
   const { writeContract, data: txHash, error: web3WriteError } = useWriteContract();
   const { isLoading: isTxConfirming, isSuccess: isTxConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
+  // Load initial APY figures from the backend
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/apy`)
+      .then((res) => res.json())
+      .then((data) => {
+        const newApys: Record<string, number> = {};
+        Object.keys(data).forEach((key) => {
+          if (key !== "lastUpdated") {
+            newApys[key] = data[key];
+          }
+        });
+        setLiveApys(newApys);
+      })
+      .catch((err) => console.log("Failed to seed initial APYs from backend:", err));
+  }, []);
+
   // APY dynamic fluctuation loops
   useEffect(() => {
     const timer = setInterval(() => {
@@ -790,17 +808,109 @@ export default function App() {
           });
           
           setTxStep(2);
-          const pathA = [TOKENS[txToken].address, activeVault.allocations[0].token.address];
-          const pathB = [TOKENS[txToken].address, activeVault.allocations[1].token.address];
+          
+          // Query backend Quote API
+          const quoteRes = await fetch(`${API_BASE_URL}/api/quote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              inputTokenSymbol: txToken,
+              amountIn: txAmount,
+              targetTokenASymbol: activeVault.allocations[0].token.symbol,
+              targetTokenBSymbol: activeVault.allocations[1].token.symbol,
+              slippageTolerance: 0.5,
+            }),
+          });
+          const quote = await quoteRes.json();
+
+          const decimalsA = activeVault.allocations[0].token.decimals;
+          const decimalsB = activeVault.allocations[1].token.decimals;
+          const amountAMin = parseUnits(quote.minAmountAOut || "0", decimalsA);
+          const amountBMin = parseUnits(quote.minAmountBOut || "0", decimalsB);
+          
+          // Apply additional 2% slippage protection for the pool deposit step itself
+          const amountAMinPool = (amountAMin * 98n) / 100n;
+          const amountBMinPool = (amountBMin * 98n) / 100n;
+          const minShares = ((amountWei / 2n) * 98n) / 100n; // Conservative min shares expectation
 
           await writeContract({
             address: activeVault.address,
             abi: VAULT_ABI,
             functionName: "depositWithERC20",
-            args: [TOKENS[txToken].address, amountWei, 0n, pathA, pathB, 0n, 0n, 0n, 0n, deadline]
+            args: [
+              TOKENS[txToken].address,
+              amountWei,
+              minShares,
+              quote.pathA,
+              quote.pathB,
+              amountAMin,
+              amountBMin,
+              amountAMinPool,
+              amountBMinPool,
+              deadline,
+            ],
           });
         } else {
           setTxStep(1);
+          
+          // Request quote to estimate output values and minimum parameters for withdrawal
+          const tokenASymbol = activeVault.allocations[0].token.symbol;
+          const tokenBSymbol = activeVault.allocations[1].token.symbol;
+          
+          // Query pool split estimates (using txToken as a mock baseline weight structure)
+          const quoteRes = await fetch(`${API_BASE_URL}/api/quote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              inputTokenSymbol: txToken,
+              amountIn: txAmount,
+              targetTokenASymbol: tokenASymbol,
+              targetTokenBSymbol: tokenBSymbol,
+              slippageTolerance: 0.5,
+            }),
+          });
+          const quote = await quoteRes.json();
+
+          const decimalsA = activeVault.allocations[0].token.decimals;
+          const decimalsB = activeVault.allocations[1].token.decimals;
+          
+          const amountAEstimate = parseUnits(quote.amountAOut || "0", decimalsA);
+          const amountBEstimate = parseUnits(quote.amountBOut || "0", decimalsB);
+          
+          // Call quote API for Token A -> txToken
+          const quoteResA = await fetch(`${API_BASE_URL}/api/quote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              inputTokenSymbol: tokenASymbol,
+              amountIn: quote.amountAOut,
+              targetTokenASymbol: txToken,
+              targetTokenBSymbol: txToken,
+              slippageTolerance: 0.5,
+            }),
+          });
+          const quoteA = await quoteResA.json();
+
+          // Call quote API for Token B -> txToken
+          const quoteResB = await fetch(`${API_BASE_URL}/api/quote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              inputTokenSymbol: tokenBSymbol,
+              amountIn: quote.amountBOut,
+              targetTokenASymbol: txToken,
+              targetTokenBSymbol: txToken,
+              slippageTolerance: 0.5,
+            }),
+          });
+          const quoteB = await quoteResB.json();
+
+          const minAmountA = (amountAEstimate * 98n) / 100n;
+          const minAmountB = (amountBEstimate * 98n) / 100n;
+          const amountAMinOut = parseUnits(quoteA.minAmountAOut || "0", decimals);
+          const amountBMinOut = parseUnits(quoteB.minAmountBOut || "0", decimals);
+          const minOutputOut = amountAMinOut + amountBMinOut;
+
           const pathA = [activeVault.allocations[0].token.address, TOKENS[txToken].address];
           const pathB = [activeVault.allocations[1].token.address, TOKENS[txToken].address];
 
@@ -808,7 +918,18 @@ export default function App() {
             address: activeVault.address,
             abi: VAULT_ABI,
             functionName: "withdrawToERC20",
-            args: [amountWei, TOKENS[txToken].address, 0n, 0n, pathA, pathB, 0n, 0n, 0n, deadline]
+            args: [
+              amountWei,
+              TOKENS[txToken].address,
+              minAmountA,
+              minAmountB,
+              pathA,
+              pathB,
+              amountAMinOut,
+              amountBMinOut,
+              minOutputOut,
+              deadline,
+            ],
           });
         }
       } catch (err: any) {
