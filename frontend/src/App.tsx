@@ -627,7 +627,7 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
 
 // --- MAIN CLIENT COMPONENT ---
 export default function App() {
-  const { isConnected, address } = useAccount();
+  const { isConnected, address, chain } = useAccount();
   const [demoMode, setDemoMode] = useState<boolean>(true);
   const [appMode, setAppMode] = useState<"landing" | "app">("landing");
   const [currentView, setCurrentView] = useState<"baskets" | "detail" | "dashboard" | "leaderboard" | "synthesizer">("baskets");
@@ -1170,134 +1170,134 @@ export default function App() {
       ) : (
         
         // --- 2. DAPP CORE DASHBOARD VIEW ---
-        <div className="flex flex-col md:flex-row min-h-screen z-10 relative">
+        <div className="flex flex-col min-h-screen z-10 relative bg-[#03060f]">
           
-          {/* Sidebar Left Navigation Panel */}
-          <aside className="w-full md:w-60 border-b md:border-b-0 md:border-r border-white/5 bg-black/45 flex flex-col justify-between shrink-0">
-            <div className="p-5">
+          {/* Sticky Top Header */}
+          <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-[#03060f]/80 backdrop-blur-md">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
               
-              {/* Brand Logo CTA */}
-              <div 
-                onClick={() => setAppMode("landing")}
-                className="flex items-center gap-2 cursor-pointer mb-6"
-              >
-                <span className="text-2xl">🧺</span>
-                <span className="sidebar-logo text-lg">BasketFlow</span>
+              <div className="flex items-center gap-8">
+                {/* Brand Logo */}
+                <div 
+                  onClick={() => setAppMode("landing")}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="text-xl animate-float">🧺</span>
+                  <span className="sidebar-logo text-base font-bold text-white tracking-tight">BasketFlow</span>
+                </div>
+                
+                {/* Desktop Tabs */}
+                <nav className="hidden md:flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentView("baskets")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      currentView === "baskets" || currentView === "detail"
+                        ? "bg-white/10 text-white font-bold" 
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Invest Baskets
+                  </button>
+                  <button
+                    onClick={() => setCurrentView("dashboard")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      currentView === "dashboard" 
+                        ? "bg-white/10 text-white font-bold" 
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    My Portfolio
+                  </button>
+                  <button
+                    onClick={() => setCurrentView("synthesizer")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      currentView === "synthesizer" 
+                        ? "bg-white/10 text-white font-bold" 
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Synthesize
+                  </button>
+                  <button
+                    onClick={() => setCurrentView("leaderboard")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      currentView === "leaderboard" 
+                        ? "bg-white/10 text-white font-bold" 
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Leaderboard
+                  </button>
+                </nav>
               </div>
 
-              {/* Nav Menu */}
-              <nav className="flex flex-col gap-1.5">
-                <button
-                  onClick={() => setCurrentView("baskets")}
-                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
-                    currentView === "baskets" || currentView === "detail"
-                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
-                      : "text-slate-400 hover:text-white border border-transparent"
-                  }`}
-                >
-                  <Compass size={15} />
-                  <span>Invest Baskets</span>
-                </button>
-                <button
-                  onClick={() => setCurrentView("dashboard")}
-                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
-                    currentView === "dashboard" 
-                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
-                      : "text-slate-400 hover:text-white border border-transparent"
-                  }`}
-                >
-                  <Layers size={15} />
-                  <span>My Portfolio</span>
-                </button>
-                <button
-                  onClick={() => setCurrentView("synthesizer")}
-                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
-                    currentView === "synthesizer" 
-                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
-                      : "text-slate-400 hover:text-white border border-transparent"
-                  }`}
-                >
-                  <Plus size={15} />
-                  <span>Synthesize Strategy</span>
-                </button>
-                <button
-                  onClick={() => setCurrentView("leaderboard")}
-                  className={`flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all text-left ${
-                    currentView === "leaderboard" 
-                      ? "bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88]" 
-                      : "text-slate-400 hover:text-white border border-transparent"
-                  }`}
-                >
-                  <Award size={15} />
-                  <span>Leaderboard</span>
-                </button>
+              {/* Right Side Info & Controls */}
+              <div className="flex items-center gap-3">
+                
+                {/* Technical status widget */}
+                <div className="relative group hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-help font-mono text-[9px] text-slate-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#00ff88] animate-pulse" />
+                  <span>{chain?.name || "Mantle Sepolia"}</span>
+                  
+                  {/* Tooltip */}
+                  <div className="absolute right-0 top-9 hidden group-hover:flex flex-col gap-1.5 p-3 w-40 bg-[#0a0d14] border border-white/5 rounded-xl shadow-2xl z-50 text-[9px] text-slate-400 font-mono">
+                    <div className="flex justify-between">
+                      <span>CHAIN ID:</span>
+                      <span className="text-white font-bold">{chain?.id || 5003}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>BLOCKS:</span>
+                      <span className="text-[#00e5ff] font-bold">#10432</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>GAS:</span>
+                      <span className="text-[#fbbf24] font-bold">12 Gwei</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sandbox toggle */}
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs">
+                  <span className="text-slate-400 font-bold font-mono text-[9px] tracking-wider">SANDBOX</span>
+                  <button 
+                    onClick={() => setDemoMode(!demoMode)} 
+                    className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full transition-colors outline-none cursor-pointer ${
+                      demoMode ? "bg-[#00ff88]" : "bg-white/10"
+                    }`}
+                  >
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-slate-900 transition-transform ${
+                      demoMode ? "translate-x-4" : "translate-x-0.5"
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Wallet Info */}
+                {!demoMode ? (
+                  <ConnectButton label="Connect Wallet" />
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-[#00ff88]/10 border border-[#00ff88]/20 rounded-lg px-2.5 py-1 text-xs text-[#00ff88] font-bold font-mono">
+                    <ShieldCheck size={13} />
+                    <span>Sandbox User</span>
+                  </div>
+                )}
+
+                {/* Guide button */}
                 <button
                   onClick={() => { setTutorialStep(0); setTutorialOpen(true); }}
-                  className="flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl text-xs font-bold text-amber-400 hover:text-amber-300 border border-transparent text-left"
+                  className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-[#fbbf24] border border-amber-500/20"
+                  title="Beginner Guide"
                 >
                   <HelpCircle size={15} />
-                  <span>Beginner Guide</span>
-                </button>
-              </nav>
-
-              {/* Technical specs hud element */}
-              <div className="mt-8 p-3 bg-black/40 border border-white/5 rounded-xl flex flex-col gap-1.5 font-mono text-[9px] text-slate-500">
-                <div className="flex justify-between">
-                  <span>CHAIN:</span>
-                  <span className="text-[#00e5ff] font-bold">Mantle Local</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>RPC PORT:</span>
-                  <span className="text-[#00ff88] font-bold">8545</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>BLOCKS:</span>
-                  <span className="text-white font-bold flex items-center gap-1">
-                    <span className="pulse-dot" style={{ width: 4, height: 4 }} />
-                    #10432
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>GAS PRICE:</span>
-                  <span className="text-[#fbbf24] font-bold">12 Gwei</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar Bottom Controls */}
-            <div className="p-5 border-t border-white/5 flex flex-col gap-3">
-              {/* Sandbox toggle */}
-              <div className="flex items-center justify-between bg-white/2 border border-white/5 rounded-xl px-3 py-2 text-xs">
-                <span className="text-slate-400 font-bold font-mono text-[10px]">SANDBOX</span>
-                <button 
-                  onClick={() => setDemoMode(!demoMode)} 
-                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors outline-none cursor-pointer ${
-                    demoMode ? "bg-[#00ff88]" : "bg-white/10"
-                  }`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-slate-900 transition-transform ${
-                    demoMode ? "translate-x-4.5" : "translate-x-1"
-                  }`} />
                 </button>
               </div>
-
-              {/* Wallet info hooks */}
-              {!demoMode ? (
-                <ConnectButton label="Connect Wallet" />
-              ) : (
-                <div className="flex items-center gap-2 bg-[#00ff88]/5 border border-[#00ff88]/15 rounded-xl px-3 py-2.5 text-xs text-[#00ff88] font-bold font-mono">
-                  <ShieldCheck size={15} />
-                  SANDBOX USER
-                </div>
-              )}
             </div>
-          </aside>
+          </header>
 
           {/* Main Content Viewport */}
-          <main className="flex-grow flex flex-col lg:flex-row pb-20 md:pb-0 overflow-y-auto">
+          <main className="flex-grow flex flex-col pb-20 md:pb-0 overflow-y-auto">
             
             {/* Core Views Column */}
-            <div className="flex-grow p-5 lg:p-8 max-w-4xl w-full mx-auto flex flex-col gap-6">
+            <div className="flex-grow p-4 sm:p-6 lg:p-8 max-w-5xl w-full mx-auto flex flex-col gap-6">
               
               {/* Sandbox info banner */}
               {demoMode && (
