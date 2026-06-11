@@ -6,25 +6,25 @@ export const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545"; // Defaul
 
 // Local Hardhat Network Contract Address references from frontend/src/contracts.ts
 export const TOKENS = {
-  USDT: "0x21df544947ba3e8b3c32561399e88b52dc8b2823",
-  USDC: "0x2e2ed0cfd3ad2f1d34481277b3204d807ca2f8c2",
-  mETH: "0xd8a5a9b31c3c0232e196d518e89fd8bf83acad43",
-  MNT: "0xdc11f7e700a4c898ae5caddb1082cffa76512add",
-  MOE: "0x51a1ceb83b83f1985a81c295d1ff28afef186e02",
+  USDT: "0xf3f280d3493b356cfb35055c0edd4ef6f87ee680",
+  USDC: "0xfe6546f15b90a9b740c5079eaab1e4539d46f988",
+  mETH: "0xeb699b700eee9452f6e52bdfa81c62364554e47b",
+  MNT: "0xdd9f1deb9fdc4aa92cca8a548b7d313bfb5cd204",
+  MOE: "0x89503b3e0db3cb324451ca7625fe8c27774d86b1",
 };
 
 export const VAULTS = {
-  conservative: "0x0355b7b8cb128fa5692729ab3aaa199c1753f726",
-  mantleMax: "0x202cce504e04bed6fc0521238ddf04bc9e8e15ab",
-  stableShuffle: "0xf4b146fba71f41e0592668ffbf264f1d186b2ca8",
-  moePowerhouse: "0x172076e0166d1f9cc711c77adf8488051744980c",
-  methAlpha: "0x4ee6ecad1c2dae9f525404de8555724e3c35d07b",
-  usdcMntYield: "0xbec49fa140acaa83533fb00a2bb19bddd0290f25",
-  liquidGold: "0xd84379ceae14aa33c123af12424a37803f885889",
-  hyperDrive: "0x2b0d36facd61b71cc05ab8f3d2355ec3631c0dd5",
+  conservative: "0x2e6fd1e46f539a94931f5194100a87d1ae544228",
+  mantleMax: "0x45c371f90d82a993364129bbd311025c2805b6df",
+  stableShuffle: "0x63ac1e2de0663dabf69b39dae8537a195c0f92c1",
+  moePowerhouse: "0x89a3d93fa1400c924e9f67b3d35de6c272e0f856",
+  methAlpha: "0x2da07c38b587cf0513baa39ac2ba7abb6e0f04bc",
+  usdcMntYield: "0x07927a4ce9207968262a9d2a65c230df20a3aa79",
+  liquidGold: "0x2666955a9c88976641792dbb8e6e981111ed3b1b",
+  hyperDrive: "0x0a67e710d4580ddd7721d0ead216836e2211b48d",
 };
 
-export const ROUTER_ADDRESS = "0x8198f5d8f8cffe8f9c413d98a0a55aeb8ab9fbb7"; // Mock Moe Router
+export const ROUTER_ADDRESS = "0xe7c1e5487787e5c478ac68478d90f9488053b9a0"; // Mock Moe Router
 
 export const ERC20_ABI = [
   {
