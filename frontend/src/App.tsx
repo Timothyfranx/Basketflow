@@ -23,7 +23,7 @@ import {
 import { parseUnits } from "viem";
 import { TOKENS, VAULTS, VAULT_ABI, ERC20_ABI } from "./contracts";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
 // --- MEMOIZED COUNTERS & PERFORMANCE TICKERS (DIRECT-DOM OPTIMIZATION TO PREVENT LAGGING) ---
 interface InterestTickerProps {
