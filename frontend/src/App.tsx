@@ -490,9 +490,6 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
                   stroke={simState !== "idle" ? "#00ff88" : "rgba(255, 255, 255, 0.05)"} 
                   strokeWidth="1.5" 
                   className="transition-all duration-300"
-                  style={{
-                    filter: simState !== "idle" ? "drop-shadow(0 0 8px rgba(0, 255, 136, 0.25))" : "none"
-                  }}
                 />
                 <text x="50" y="78" textAnchor="middle" fontSize="14">💳</text>
                 <text x="50" y="92" textAnchor="middle" fontSize="8" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{simAmount}</text>
@@ -513,10 +510,6 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
                   } 
                   strokeWidth="1.5" 
                   className="transition-all duration-500"
-                  style={{
-                    filter: simState === "swapping" ? "drop-shadow(0 0 8px rgba(0, 229, 255, 0.25))" : 
-                            simState === "pooling" || simState === "complete" ? "drop-shadow(0 0 8px rgba(99, 102, 241, 0.25))" : "none"
-                  }}
                 />
                 {simState === "swapping" && (
                   <circle 
@@ -589,9 +582,6 @@ export const YieldRoutingVisualizer = memo(({ vaultsList }: YieldRoutingVisualiz
                   stroke={simState === "complete" ? "#00ff88" : "rgba(255, 255, 255, 0.05)"} 
                   strokeWidth="1.5" 
                   className="transition-all duration-300"
-                  style={{
-                    filter: simState === "complete" ? "drop-shadow(0 0 10px rgba(0, 255, 136, 0.3))" : "none"
-                  }}
                 />
                 <text x="540" y="78" textAnchor="middle" fontSize="14">🛡️</text>
                 <text x="540" y="92" textAnchor="middle" fontSize="7" fill="#ffffff" fontWeight="bold" fontFamily="monospace">{activeVault.symbol}</text>
@@ -1185,7 +1175,7 @@ export default function App() {
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <span className="text-xl animate-float">🧺</span>
-                  <span className="sidebar-logo text-base font-bold text-white tracking-tight">BasketFlow</span>
+                  <span className="sidebar-logo text-base font-bold text-white tracking-tight hidden min-[380px]:inline">BasketFlow</span>
                 </div>
                 
                 {/* Desktop Tabs */}
@@ -1260,7 +1250,7 @@ export default function App() {
 
                 {/* Sandbox toggle */}
                 <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs">
-                  <span className="text-slate-400 font-bold font-mono text-[9px] tracking-wider">SANDBOX</span>
+                  <span className="text-slate-400 font-bold font-mono text-[9px] tracking-wider hidden sm:inline">SANDBOX</span>
                   <button 
                     onClick={() => setDemoMode(!demoMode)} 
                     className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full transition-colors outline-none cursor-pointer ${
@@ -1279,7 +1269,8 @@ export default function App() {
                 ) : (
                   <div className="flex items-center gap-1.5 bg-[#00ff88]/10 border border-[#00ff88]/20 rounded-lg px-2.5 py-1 text-xs text-[#00ff88] font-bold font-mono">
                     <ShieldCheck size={13} />
-                    <span>Sandbox User</span>
+                    <span className="hidden min-[380px]:inline">Sandbox User</span>
+                    <span className="min-[380px]:hidden text-[9px]">Sandbox</span>
                   </div>
                 )}
 
